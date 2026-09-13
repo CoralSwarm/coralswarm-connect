@@ -1,5 +1,7 @@
 # CoralSwarm Connect
 
+<img src="assets/logo.svg" alt="CoralSwarm" width="72" height="72">
+
 Connect the CoralSwarm MCP and turn on **automatic, in-session** capture of your
 work into your ocean — at natural checkpoints *during* the session, not only
 when it ends. Ships for Claude Code, Cursor, and Codex. Enable the plugin in

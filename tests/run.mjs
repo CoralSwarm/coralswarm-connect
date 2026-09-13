@@ -1420,7 +1420,9 @@ function runDispatcher(home, payload, cwd) {
     eq(p.version, "1.1.0", `${rel} version is 1.1.0`);
     eq(p.skills, "./skills/", `${rel} skills points at ./skills/`);
     eq(p.hooks, "./hooks/hooks.json", `${rel} hooks points at hooks.json`);
+    eq(p.logo, "assets/logo.svg", `${rel} logo is assets/logo.svg`);
   }
+  ok(existsSync(join(SKILL_DIR, "assets", "logo.svg")), "assets/logo.svg is committed");
   const cursor = JSON.parse(readFileSync(join(SKILL_DIR, ".cursor-plugin", "plugin.json"), "utf8"));
   eq(cursor.mcpServers, "./mcp.json", ".cursor-plugin mcpServers points at ./mcp.json");
   const claude = JSON.parse(readFileSync(join(SKILL_DIR, ".claude-plugin", "plugin.json"), "utf8"));
@@ -1436,6 +1438,15 @@ function runDispatcher(home, payload, cwd) {
   eq(names.length, 1, "marketplace lists exactly one plugin");
   eq(names[0], "coralswarm-connect", "marketplace ships only coralswarm-connect");
   eq(market.plugins?.[0]?.source, "./", "marketplace source is the repo root");
+  eq(market.plugins?.[0]?.logo, "assets/logo.svg", "marketplace lists assets/logo.svg");
+  const cursorMarket = JSON.parse(readFileSync(join(SKILL_DIR, ".cursor-plugin", "marketplace.json"), "utf8"));
+  eq(cursorMarket.plugins?.[0]?.logo, "assets/logo.svg", "cursor marketplace lists assets/logo.svg");
+  const svg = readFileSync(join(SKILL_DIR, "assets", "logo.svg"), "utf8");
+  const fills = [...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1]);
+  const hues = new Set(["#F77764", "#EB7290", "#F4B860", "#2A9D8F", "#7C5295"]);
+  ok(fills.length === 49, "logo.svg is the 49-dot DotMandala");
+  ok(fills.every((c) => hues.has(c)), "logo.svg uses only the five brand hues");
+  ok(!/<rect\b/i.test(svg), "logo.svg has no container shape");
 }
 
 // ── summary ────────────────────────────────────────────────────────────────

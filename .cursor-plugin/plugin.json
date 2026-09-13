@@ -11,6 +11,7 @@
   "homepage": "https://github.com/CoralSwarm/coralswarm-connect",
   "repository": "https://github.com/CoralSwarm/coralswarm-connect",
   "keywords": ["mcp", "knowledge-graph", "claude-code", "cursor", "codex"],
+  "logo": "assets/logo.svg",
   "skills": "./skills/",
   "mcpServers": "./mcp.json",
   "hooks": "./hooks/hooks.json"
