@@ -1419,7 +1419,6 @@ function runDispatcher(home, payload, cwd) {
     eq(p.name, "coralswarm-connect", `${rel} name is coralswarm-connect`);
     eq(p.version, "1.1.0", `${rel} version is 1.1.0`);
     eq(p.skills, "./skills/", `${rel} skills points at ./skills/`);
-    eq(p.hooks, "./hooks/hooks.json", `${rel} hooks points at hooks.json`);
     eq(p.logo, "assets/logo.svg", `${rel} logo is assets/logo.svg`);
   }
   ok(existsSync(join(SKILL_DIR, "assets", "logo.svg")), "assets/logo.svg is committed");
@@ -1429,6 +1428,19 @@ function runDispatcher(home, payload, cwd) {
   const codex = JSON.parse(readFileSync(join(SKILL_DIR, ".codex-plugin", "plugin.json"), "utf8"));
   eq(claude.mcpServers, "./.mcp.json", ".claude-plugin mcpServers points at ./.mcp.json");
   eq(codex.mcpServers, "./.mcp.json", ".codex-plugin mcpServers points at ./.mcp.json");
+  // Claude Code loads the conventional `hooks/hooks.json` automatically, and
+  // `manifest.hooks` is for ADDITIONAL hook files. Naming the standard file
+  // there makes the loader see the same path twice and refuse the whole
+  // plugin: "Duplicate hooks file detected ... failed to load" — no hooks, no
+  // skills, no MCP server, and the only symptom is a status line in
+  // `claude plugin list` that nobody reads. The manifest must therefore stay
+  // silent about it. Cursor and Codex have no such convention and still
+  // declare the file explicitly, which is why this is asserted per-harness
+  // rather than in the shared loop above.
+  eq(claude.hooks, undefined, ".claude-plugin does NOT declare hooks (Claude Code auto-loads hooks/hooks.json; declaring it fails the plugin load)");
+  eq(cursor.hooks, "./hooks/hooks.json", ".cursor-plugin hooks points at hooks.json");
+  eq(codex.hooks, "./hooks/hooks.json", ".codex-plugin hooks points at hooks.json");
+  ok(existsSync(join(SKILL_DIR, "hooks", "hooks.json")), "the conventional hooks/hooks.json is committed");
   const dotted = JSON.parse(readFileSync(join(SKILL_DIR, ".mcp.json"), "utf8"));
   const undotted = JSON.parse(readFileSync(join(SKILL_DIR, "mcp.json"), "utf8"));
   eq(JSON.stringify(dotted), JSON.stringify(undotted), ".mcp.json and mcp.json are identical");
