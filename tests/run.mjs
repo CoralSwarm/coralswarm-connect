@@ -1447,6 +1447,13 @@ function runDispatcher(home, payload, cwd) {
   ok(fills.length === 49, "logo.svg is the 49-dot DotMandala");
   ok(fills.every((c) => hues.has(c)), "logo.svg uses only the five brand hues");
   ok(!/<rect\b/i.test(svg), "logo.svg has no container shape");
+  ok(existsSync(join(SKILL_DIR, ".github", "CODEOWNERS")), ".github/CODEOWNERS is committed");
+  ok(existsSync(join(SKILL_DIR, ".github", "workflows", "test.yml")), ".github/workflows/test.yml is committed");
+  ok(existsSync(join(SKILL_DIR, "SECURITY.md")), "SECURITY.md is committed");
+  const wf = readFileSync(join(SKILL_DIR, ".github", "workflows", "test.yml"), "utf8");
+  ok(!/(?:^|\n)\s*pull_request_target\s*:/.test(wf), "CI must not use pull_request_target");
+  ok(/persist-credentials:\s*false/.test(wf), "CI checkout must not persist credentials");
+  ok(/permissions:\s*\n\s*contents:\s*read/.test(wf), "CI token is contents:read");
 }
 
 // ── summary ────────────────────────────────────────────────────────────────

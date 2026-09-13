@@ -1,0 +1,3 @@
+# Hooks and MCP manifests run on every installer's machine. Nothing lands
+# on main without an owner review (admins may bypass via PR merge only).
+* @saad172
