@@ -33,7 +33,9 @@ jobs:
       - name: no secrets in tree
         run: |
           set -euo pipefail
-          if git grep -I -E 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-|sk-or-[A-Za-z0-9]|BEGIN (RSA |OPENSSH )?PRIVATE KEY' -- ':!tests/' ':!README.md' ':!skills/'; then
+          # Patterns are assembled so this file cannot match itself.
+          a='ghp_'; b='github_pat_'; c='sk-ant-'; d='sk-or-'
+          if git grep -I -E "${a}[A-Za-z0-9]{20,}|${b}[A-Za-z0-9_]{20,}|${c}[A-Za-z0-9]{8,}|${d}[A-Za-z0-9]{8,}|BEGIN (RSA |OPENSSH )?PRIVATE KEY" -- ':!tests/' ':!README.md' ':!skills/' ':!.github/workflows/'; then
             echo "possible secret in tracked files" >&2
             exit 1
           fi
