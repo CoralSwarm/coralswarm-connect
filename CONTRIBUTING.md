@@ -31,9 +31,19 @@ it merges, push a `vX.Y.Z` tag matching them. The tag runs
 and publishes `server.json` to the official MCP Registry. Never tag a commit
 whose manifests say something else — the workflow refuses it.
 
+Versions must be strict SemVer 2.0.0. The rule lives twice — `SEMVER_ERE` in
+`scripts/check-version.sh` and `SEMVER` in `tests/run.mjs` — and `tests/run.mjs`
+runs both over one shared table, so change them together or the suite fails.
+
 If you add a **new** manifest that carries a version, add it to `DECLARED` in
 `scripts/check-version.sh`; the script fails on any unregistered `version` field
 rather than quietly ignoring it.
+
+`release.yml` pins `mcp-publisher` to an exact release and verifies its SHA-256
+before running it — that step is handed the registry signing key, so it must not
+execute an unverified binary. Bumping `MCP_PUBLISHER_VERSION` **requires**
+updating `MCP_PUBLISHER_SHA256` in the same commit; take the digest from the
+pinned release's `registry_<version>_checksums.txt`.
 
 ## Secrets
 

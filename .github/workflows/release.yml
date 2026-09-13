@@ -83,9 +83,38 @@ jobs:
       - name: tests
         run: node tests/run.mjs
 
-      - name: install mcp-publisher
+      # PINNED + CHECKSUMED, deliberately not the mutable rolling download.
+      # This job hands the binary MCP_REGISTRY_DNS_PRIVATE_KEY, a key that can
+      # publish or overwrite ANY server under com.coralswarm/*. Fetching a
+      # mutable artifact would mean a compromised upstream release could swap the
+      # binary and exfiltrate the key, with nothing here to notice.
+      #
+      # Pin:    mcp-publisher v1.8.1, released 2026-08-06
+      #         https://github.com/modelcontextprotocol/registry/releases/tag/v1.8.1
+      # Digest: the SHA-256 of mcp-publisher_linux_amd64.tar.gz exactly as published
+      #         in that release's registry_1.8.1_checksums.txt (confirmed against the
+      #         GitHub release-asset digest and by hashing the download).
+      #
+      # The digest below is the trust anchor: it lives in this repo and changes only
+      # through a reviewed PR. Bumping MCP_PUBLISHER_VERSION REQUIRES updating
+      # MCP_PUBLISHER_SHA256 in the same commit, or this step fails closed.
+      # runs-on is ubuntu-latest, hence the linux/amd64 asset; on any other runner
+      # architecture the checksum will not match and the release stops here.
+      #
+      # Order matters: download, THEN verify, THEN unpack. Verifying after unpacking
+      # would already have written attacker-controlled bytes to disk.
+      - name: install mcp-publisher (pinned, checksum-verified)
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_ASSET: mcp-publisher_linux_amd64.tar.gz
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
         run: |
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          curl -fsSL --proto '=https' --tlsv1.2 -o "${MCP_PUBLISHER_ASSET}" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${MCP_PUBLISHER_ASSET}"
+          echo "${MCP_PUBLISHER_SHA256}  ${MCP_PUBLISHER_ASSET}" | sha256sum -c -
+          tar xzf "${MCP_PUBLISHER_ASSET}" mcp-publisher
+          chmod +x ./mcp-publisher
+          rm -f "${MCP_PUBLISHER_ASSET}"
 
       # Fail on a bad server.json BEFORE the signing key is ever in the env.
       - name: validate server.json

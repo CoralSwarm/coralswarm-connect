@@ -162,9 +162,20 @@ fi
 VERSION="$(printf '%s\n' "$unique" | head -1)"
 
 # ── shape: a release tag is v<version>, and the registry rejects ranges ─────
+# Strict SemVer 2.0.0. This is the official regex from
+# https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+# mechanically translated to POSIX ERE: (?:...) -> (...) and \d -> [0-9].
+# Strictness matters — a loose [0-9]+ form accepts leading zeros (01.2.3) and
+# empty dot-separated identifiers (1.2.3-alpha..1), which are NOT SemVer, do not
+# sort as anyone expects, and would be published to the registry under a version
+# no tag can reproduce. tests/run.mjs runs this exact string through grep against
+# a shared case table, so this and the JS copy cannot drift apart.
+# SEMVER_ERE is parsed out of this file by that test — keep it one line.
+SEMVER_ERE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
+
 if [ -n "$VERSION" ]; then
-  if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
-    fail "version '$VERSION' is not MAJOR.MINOR.PATCH[-prerelease][+build]"
+  if ! printf '%s' "$VERSION" | grep -Eq "$SEMVER_ERE"; then
+    fail "version '$VERSION' is not strict SemVer 2.0.0 (MAJOR.MINOR.PATCH[-prerelease][+build], no leading zeros, no empty identifiers)"
   fi
 fi
 

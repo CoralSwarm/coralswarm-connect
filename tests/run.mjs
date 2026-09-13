@@ -1412,14 +1412,22 @@ function runDispatcher(home, payload, cwd) {
   ok(Number(readRec(home, U_CUR).last_save_at) >= t - 2, "n3: dispatcher stamps last_save_at for Cursor add_context");
 }
 
+// Strict SemVer 2.0.0 — the official regex from
+// https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+// A loose [0-9]+ form accepts leading zeros (01.2.3) and empty dot-separated
+// identifiers (1.2.3-alpha..1), neither of which is SemVer. scripts/check-version.sh
+// holds the POSIX-ERE twin of this as SEMVER_ERE; (n6) runs BOTH over one shared
+// table so the two copies cannot drift apart.
+const SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
 // (n4) manifests exist, use the production name, and point at the same files.
 {
   // The release version is ONE string across every manifest (scripts/check-version.sh
   // is the gate). Assert agreement with the canonical manifest rather than a literal
   // that has to be hand-edited on every bump — a literal goes stale silently.
   const CANON = JSON.parse(readFileSync(join(SKILL_DIR, ".claude-plugin", "plugin.json"), "utf8")).version;
-  ok(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(CANON ?? ""),
-     `plugin version is semver (got ${JSON.stringify(CANON)})`);
+  ok(SEMVER.test(CANON ?? ""), `plugin version is strict SemVer 2.0.0 (got ${JSON.stringify(CANON)})`);
   for (const rel of [".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", ".codex-plugin/plugin.json"]) {
     const p = JSON.parse(readFileSync(join(SKILL_DIR, rel), "utf8"));
     eq(p.name, "coralswarm-connect", `${rel} name is coralswarm-connect`);
@@ -1535,6 +1543,62 @@ function runDispatcher(home, payload, cwd) {
   ok(/persist-credentials:\s*false/.test(rel), "release checkout must not persist credentials");
   ok(/secrets\.MCP_REGISTRY_DNS_PRIVATE_KEY/.test(rel), "release reads the MCP_REGISTRY_DNS_PRIVATE_KEY secret");
   ok(/check-version\.sh --expect/.test(rel), "release refuses a tag that disagrees with the manifests");
+
+  // Supply chain: this job hands mcp-publisher the DNS signing key, so the binary
+  // it runs must be pinned and verified. A mutable rolling artifact would let a
+  // compromised upstream release swap the binary and exfiltrate the key.
+  ok(!/releases\/latest\/download/.test(rel), "release must not fetch the mutable 'latest' mcp-publisher artifact");
+  ok(/MCP_PUBLISHER_VERSION:\s*v\d+\.\d+\.\d+/.test(rel), "mcp-publisher is pinned to an exact release version");
+  ok(/MCP_PUBLISHER_SHA256:\s*[0-9a-f]{64}\b/.test(rel), "the pinned mcp-publisher artifact has an embedded SHA-256");
+  ok(/sha256sum -c/.test(rel), "release verifies that SHA-256 before running the binary");
+  // Ordering is the property, not the mere presence of a checksum line: verifying
+  // after unpacking would already have written attacker-controlled bytes to disk.
+  const shaAt = rel.indexOf("sha256sum -c");
+  const tarAt = rel.indexOf("tar xzf");
+  ok(shaAt !== -1 && tarAt !== -1 && shaAt < tarAt, "the checksum is verified BEFORE the archive is unpacked");
+  ok(!/\|\s*tar\s/.test(rel), "the download must not be piped straight into tar (that unpacks before verifying)");
+}
+
+// (n6) the version gate is strict SemVer 2.0.0 — in BOTH copies of the rule.
+{
+  const VALID = [
+    "1.1.0", "0.0.0", "0.0.4", "1.2.3", "10.20.30",
+    "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-0.3.7", "1.0.0-x.7.z.92",
+    "1.0.0-alpha0.valid", "1.0.0-alpha+001", "1.0.0+20130313144700",
+    "1.0.0-beta+exp.sha.5114f85", "1.2.3-rc.1+build.5", "2.0.0-rc.1+build.123",
+  ];
+  const INVALID = [
+    // leading zeros — accepted by a naive [0-9]+ form, not SemVer
+    "01.2.3", "1.01.3", "1.2.03", "1.2.3-01",
+    // empty components / identifiers
+    "1..2", "1.2.3-", "1.2.3+", "1.2.3-alpha..1", "1.2.3+a..b", "1.2.3-+",
+    // wrong shape, or a range the registry rejects outright
+    "1.2", "1.2.3.4", "^1.1.0", "~1.2.3", ">=1.2.3", "1.x", "v1.2.3", "",
+    // stray whitespace must not sneak through an unanchored match
+    " 1.2.3", "1.2.3 ",
+  ];
+
+  for (const v of VALID) ok(SEMVER.test(v), `SEMVER accepts ${JSON.stringify(v)}`);
+  for (const v of INVALID) ok(!SEMVER.test(v), `SEMVER rejects ${JSON.stringify(v)}`);
+
+  // The same table through the ERE scripts/check-version.sh actually uses, run by
+  // grep — so what is tested is the shell rule itself, not a transcription of it.
+  const sh = readFileSync(join(SKILL_DIR, "scripts", "check-version.sh"), "utf8");
+  const m = sh.match(/^SEMVER_ERE='(.+)'$/m);
+  ok(m !== null, "scripts/check-version.sh exposes SEMVER_ERE as a single-line literal");
+  if (m) {
+    const ere = m[1];
+    const shellAccepts = (v) => {
+      try {
+        execFileSync("grep", ["-Eq", ere], { input: v, stdio: ["pipe", "pipe", "pipe"] });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (const v of VALID) ok(shellAccepts(v), `check-version.sh ERE accepts ${JSON.stringify(v)}`);
+    for (const v of INVALID) ok(!shellAccepts(v), `check-version.sh ERE rejects ${JSON.stringify(v)}`);
+  }
 }
 
 // ── summary ────────────────────────────────────────────────────────────────

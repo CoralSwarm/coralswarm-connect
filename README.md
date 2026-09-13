@@ -250,6 +250,12 @@ equals the manifests' version (`--expect`), runs the tests, validates
 `server.json`, authenticates to the registry by **DNS proof on coralswarm.com**,
 and publishes. Nothing publishes from a branch or a PR.
 
+Versions are strict [SemVer 2.0.0](https://semver.org) — no leading zeros, no
+empty identifiers — because the registry rejects ranges and a non-SemVer version
+does not sort predictably once published. The `mcp-publisher` binary that job
+runs is pinned to an exact release and checksum-verified before it executes,
+since it is the one step holding the signing key.
+
 DNS proof — not GitHub OIDC — because the registry derives the namespace from
 the auth method: GitHub auth only ever grants `io.github.<owner>/*`, while a
 reverse-DNS namespace like `com.coralswarm/*` requires domain verification. The
