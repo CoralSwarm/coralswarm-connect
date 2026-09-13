@@ -10,7 +10,8 @@
   "license": "MIT",
   "homepage": "https://github.com/CoralSwarm/coralswarm-connect",
   "repository": "https://github.com/CoralSwarm/coralswarm-connect",
+  "keywords": ["mcp", "knowledge-graph", "claude-code", "cursor", "codex"],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": "./mcp.json",
   "hooks": "./hooks/hooks.json"
 }

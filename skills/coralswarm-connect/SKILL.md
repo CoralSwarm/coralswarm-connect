@@ -89,7 +89,7 @@ hook ships in `hooks.json`; the manual installer registers it too.
 
 ## Tests
 
-`node plugins/coralswarm-connect/tests/run.mjs` runs a dependency-free suite:
+`node tests/run.mjs` runs a dependency-free suite:
 the normalizer against the same case matrix as the Rust unit tests, an
 end-to-end `session-primer` run in a temp git repo with a token-bearing remote
 (asserting the secret never appears in output), graceful degradation outside a
@@ -220,7 +220,7 @@ claude mcp list 2>/dev/null | grep -i coralswarm
 Run the installer bundled with this plugin — `scripts/install.mjs`. It lives at
 the **plugin root's** `scripts/` dir, which is two levels up from this SKILL.md
 (`SKILL_DIR` below is this skill's own directory, e.g.
-`plugins/coralswarm-connect/skills/coralswarm-connect`, wherever the plugin is
+`skills/coralswarm-connect`, wherever the plugin is
 installed — resolve it from where you loaded this SKILL.md; the installer is at
 `$SKILL_DIR/../../scripts/install.mjs`). It copies the hook scripts to
 `~/.coralswarm/hooks/` and merges the hook entries into settings.json
@@ -229,7 +229,7 @@ idempotently (it never clobbers existing hooks, and re-running is safe):
 ```bash
 node "$SKILL_DIR/../../scripts/install.mjs" --scope project
 # from a repo checkout you can equivalently run it by its repo path:
-#   node plugins/coralswarm-connect/scripts/install.mjs --scope project
+#   node scripts/install.mjs --scope project
 ```
 
 - `--scope project` (default) writes to `./.claude/settings.json` — capture is

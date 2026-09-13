@@ -12,7 +12,7 @@ kernel no-ops the duplicate).
 
 ```bash
 claude plugin marketplace add CoralSwarm/coralswarm-connect
-claude plugin install coralswarm-connect@coralswarm
+claude plugin install coralswarm-connect@coralswarm-connect
 ```
 
 Then run `/mcp` and **Authenticate** on the `coralswarm` server (Clerk OAuth).
@@ -30,7 +30,7 @@ register the same events a second time in `settings.json`.
 
 > **Public plugin repo.** This repository is the marketplace source. The
 > product backend still lives in `CoralSwarm/coralswarm`. Refresh with
-> `/plugin marketplace update coralswarm`.
+> `/plugin marketplace update coralswarm-connect`.
 >
 > **One-time trust + OAuth.** A plugin-provided MCP server still requires you to
 > approve the server (trust prompt) and complete OAuth via `/mcp` the first time
@@ -161,7 +161,7 @@ Tunable via env (finite-positive-clamped, like the interval vars):
 ## Tests (no dependencies)
 
 ```bash
-node plugins/coralswarm-connect/tests/run.mjs
+node tests/run.mjs
 ```
 
 Runs the normalizer against the same case matrix as the Rust unit tests, an
@@ -185,10 +185,10 @@ Claude Code `settings.json` idempotently — it never clobbers existing hooks, a
 only ever touches hooks whose command path points at the CoralSwarm hooks dir.
 
 ```bash
-node plugins/coralswarm-connect/scripts/install.mjs --scope project     # this repo only (default)
-node plugins/coralswarm-connect/scripts/install.mjs --scope user        # every session
-node plugins/coralswarm-connect/scripts/install.mjs --scope project --no-stop     # omit the Stop backstop
-node plugins/coralswarm-connect/scripts/install.mjs --scope project --uninstall
+node scripts/install.mjs --scope project     # this repo only (default)
+node scripts/install.mjs --scope user        # every session
+node scripts/install.mjs --scope project --no-stop     # omit the Stop backstop
+node scripts/install.mjs --scope project --uninstall
 ```
 
 The manual path and the plugin path are functionally equivalent (same four

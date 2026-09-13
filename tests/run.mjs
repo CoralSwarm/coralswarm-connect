@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CoralSwarm Connect — hook test runner (plain node, no dependencies).
 //
-// Run: node plugins/coralswarm-connect/tests/run.mjs
+// Run: node tests/run.mjs
 //
 // Covers, per Phase 2 acceptance:
 //   (a) session-primer.mjs end-to-end: fake stdin in a temp git repo whose
@@ -1418,17 +1418,24 @@ function runDispatcher(home, payload, cwd) {
     const p = JSON.parse(readFileSync(join(SKILL_DIR, rel), "utf8"));
     eq(p.name, "coralswarm-connect", `${rel} name is coralswarm-connect`);
     eq(p.version, "1.1.0", `${rel} version is 1.1.0`);
-  }
-  for (const rel of [".cursor-plugin/plugin.json", ".codex-plugin/plugin.json"]) {
-    const p = JSON.parse(readFileSync(join(SKILL_DIR, rel), "utf8"));
-    eq(p.mcpServers, "./.mcp.json", `${rel} mcpServers points at ./.mcp.json`);
     eq(p.skills, "./skills/", `${rel} skills points at ./skills/`);
+    eq(p.hooks, "./hooks/hooks.json", `${rel} hooks points at hooks.json`);
   }
-  const market = JSON.parse(readFileSync(join(SKILL_DIR, "..", "..", ".claude-plugin", "marketplace.json"), "utf8"));
+  const cursor = JSON.parse(readFileSync(join(SKILL_DIR, ".cursor-plugin", "plugin.json"), "utf8"));
+  eq(cursor.mcpServers, "./mcp.json", ".cursor-plugin mcpServers points at ./mcp.json");
+  const claude = JSON.parse(readFileSync(join(SKILL_DIR, ".claude-plugin", "plugin.json"), "utf8"));
+  const codex = JSON.parse(readFileSync(join(SKILL_DIR, ".codex-plugin", "plugin.json"), "utf8"));
+  eq(claude.mcpServers, "./.mcp.json", ".claude-plugin mcpServers points at ./.mcp.json");
+  eq(codex.mcpServers, "./.mcp.json", ".codex-plugin mcpServers points at ./.mcp.json");
+  const dotted = JSON.parse(readFileSync(join(SKILL_DIR, ".mcp.json"), "utf8"));
+  const undotted = JSON.parse(readFileSync(join(SKILL_DIR, "mcp.json"), "utf8"));
+  eq(JSON.stringify(dotted), JSON.stringify(undotted), ".mcp.json and mcp.json are identical");
+  const market = JSON.parse(readFileSync(join(SKILL_DIR, ".claude-plugin", "marketplace.json"), "utf8"));
   const names = (market.plugins || []).map((p) => p.name);
+  eq(market.name, "coralswarm-connect", "marketplace id is coralswarm-connect (does not collide with the private monorepo marketplace)");
   eq(names.length, 1, "marketplace lists exactly one plugin");
   eq(names[0], "coralswarm-connect", "marketplace ships only coralswarm-connect");
-  eq(market.plugins?.[0]?.source, "./plugins/coralswarm-connect", "marketplace source is ./plugins/coralswarm-connect");
+  eq(market.plugins?.[0]?.source, "./", "marketplace source is the repo root");
 }
 
 // ── summary ────────────────────────────────────────────────────────────────

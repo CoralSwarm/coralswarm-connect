@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "coralswarm": {
+      "type": "http",
+      "url": "https://api.coralswarm.com/mcp"
+    }
+  }
+}
