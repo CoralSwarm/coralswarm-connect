@@ -214,3 +214,8 @@ uses `.codex-plugin/plugin.json`. All three point at the same `.mcp.json`,
 `skills/`, and `hooks/hooks.json`. `scripts/install.mjs` remains a Claude
 `settings.json` fallback (exec form: `command: "node"`, `args: [absolute
 run.mjs]`) for machines without a plugin manager.
+
+## Contributing
+
+PRs only — `main` is locked. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[SECURITY.md](SECURITY.md). Run `node tests/run.mjs` before you open a PR.
