@@ -8,24 +8,40 @@ when it ends. Ships for Claude Code, Cursor, and Codex. Enable the plugin in
 **one** manager; leaving two copies enabled will fire SessionStart twice (the
 kernel no-ops the duplicate).
 
-## New machine?
+## Install
 
-**Claude Code**
+There are two levels. The **plugin** gives you the MCP tools *plus* the capture
+hooks and the bundled skill; the **raw MCP URL** gives you the tools only, and
+works in any MCP client.
 
-```bash
-claude plugin marketplace add CoralSwarm/coralswarm-connect
-claude plugin install coralswarm-connect@coralswarm-connect
-```
+| Client | Install |
+| --- | --- |
+| **Claude Code** (plugin) | `/plugin marketplace add CoralSwarm/coralswarm-connect`<br>then `/plugin install coralswarm-connect@coralswarm-connect` |
+| **Cursor** (plugin) | Add this repo as a plugin source, install `coralswarm-connect`, then complete MCP login |
+| **Codex** (plugin) | Same repo, same plugin name; Codex may ask you to trust hooks the first time |
+| **Any MCP client** — Cursor, ChatGPT, VS Code, your own — (tools only) | Add an MCP server of type **streamable HTTP** at `https://api.coralswarm.com/mcp` |
 
-Then run `/mcp` and **Authenticate** on the `coralswarm` server (Clerk OAuth).
+`coralswarm-connect@coralswarm-connect` is not a typo: the first half is the
+plugin, the second is the marketplace this repo publishes (both are named
+`coralswarm-connect` — see `.claude-plugin/marketplace.json`). The same two
+commands work from a shell as `claude plugin marketplace add …` /
+`claude plugin install …`.
 
-**Cursor** — install `coralswarm-connect` from the CoralSwarm marketplace, then
-complete MCP login (`/mcp login` or the `mcp_auth` prompt) against
-`https://api.coralswarm.com/mcp`. The URL must match that literal string;
-Cursor rejects a `fly.dev` resource that does not match the server metadata.
+After any of these, authenticate: in Claude Code run `/mcp` and **Authenticate**
+on the `coralswarm` server; in Cursor use `/mcp login` or the `mcp_auth` prompt.
+Auth is OAuth (Clerk) with dynamic client registration — there is no API key to
+paste and nothing to put in a config file.
 
-**Codex** — install the same plugin; Codex may ask you to trust hooks the first
-time.
+The MCP URL must be that literal string. Cursor rejects a `fly.dev` resource
+that does not match the server's protected-resource metadata.
+
+> CoralSwarm Connect is **not** listed in any client's built-in plugin or
+> connector directory yet. The paths above are the ones that work today. This
+> repo also ships [`server.json`](server.json) for the
+> [official MCP Registry](https://registry.modelcontextprotocol.io) under the
+> name `com.coralswarm/coralswarm`; it is published by a release tag (see
+> [Releasing](#releasing)), so treat a registry listing as present only once a
+> tag has shipped.
 
 Do **not** run `scripts/install.mjs` when the plugin is enabled — that would
 register the same events a second time in `settings.json`.
@@ -215,7 +231,39 @@ uses `.codex-plugin/plugin.json`. All three point at the same `.mcp.json`,
 `settings.json` fallback (exec form: `command: "node"`, `args: [absolute
 run.mjs]`) for machines without a plugin manager.
 
+## Releasing
+
+One version, four manifests: `.claude-plugin/plugin.json`,
+`.cursor-plugin/plugin.json`, `.codex-plugin/plugin.json`, and `server.json`.
+`scripts/check-version.sh` fails if they disagree, and PR CI runs it.
+
+```bash
+# 1. bump all four to the new version, in a PR
+bash scripts/check-version.sh          # must pass before you push
+
+# 2. after it merges, tag the merge commit on main
+git tag v1.2.3 && git push origin v1.2.3
+```
+
+The tag starts `.github/workflows/release.yml`, which re-checks that the tag
+equals the manifests' version (`--expect`), runs the tests, validates
+`server.json`, authenticates to the registry by **DNS proof on coralswarm.com**,
+and publishes. Nothing publishes from a branch or a PR.
+
+DNS proof — not GitHub OIDC — because the registry derives the namespace from
+the auth method: GitHub auth only ever grants `io.github.<owner>/*`, while a
+reverse-DNS namespace like `com.coralswarm/*` requires domain verification. The
+apex TXT record on `coralswarm.com` and the `MCP_REGISTRY_DNS_PRIVATE_KEY`
+secret are documented in the workflow header.
+
+## Support
+
+- Bugs and feature requests: [GitHub Issues](https://github.com/CoralSwarm/coralswarm-connect/issues)
+- Everything else: <support@coralswarm.com>
+- Security: see [SECURITY.md](SECURITY.md)
+
 ## Contributing
 
 PRs only — `main` is locked. See [CONTRIBUTING.md](CONTRIBUTING.md) and
-[SECURITY.md](SECURITY.md). Run `node tests/run.mjs` before you open a PR.
+[SECURITY.md](SECURITY.md). Run `node tests/run.mjs` and
+`bash scripts/check-version.sh` before you open a PR.

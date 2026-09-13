@@ -4,12 +4,16 @@
   "description": "Connect the CoralSwarm MCP and capture coding work into your ocean as you go — session primer, mid-session save nudges, precompact flush, and crash-reconcile.",
   "author": {
     "name": "CoralSwarm",
-    "url": "https://github.com/CoralSwarm"
+    "email": "support@coralswarm.com",
+    "url": "https://coralswarm.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/CoralSwarm/coralswarm-connect",
+  "homepage": "https://coralswarm.com",
   "repository": "https://github.com/CoralSwarm/coralswarm-connect",
   "keywords": ["mcp", "knowledge-graph", "claude-code", "cursor", "codex"],
+  "metadata": {
+    "support": "https://github.com/CoralSwarm/coralswarm-connect/issues"
+  },
   "logo": "assets/logo.svg",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",

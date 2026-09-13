@@ -1,0 +1,107 @@
+# Tag-driven release: publish server.json to the official MCP Registry.
+#
+# Trigger: pushing a semver tag (v1.2.3). Nothing publishes on a PR or a branch
+# push — this workflow is the ONLY thing in the repo that holds a credential, so
+# it must never run on untrusted code (no `pull_request`, no `pull_request_target`).
+#
+# ── Authentication: DNS, not OIDC ────────────────────────────────────────────
+# The registry ties the namespace to how you authenticated:
+#
+#   GitHub OAuth / PAT / OIDC  ->  io.github.<user-or-org>/*   ONLY
+#   DNS or HTTP domain proof   ->  <reverse-dns-of-your-domain>/*
+#
+# We publish as `com.coralswarm/coralswarm`, a reverse-DNS namespace, so
+# `mcp-publisher login github-oidc` CANNOT authorize it — it would only ever
+# grant `io.github.coralswarm/*`. Domain proof is required.
+# Docs: https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/authentication.mdx
+#      https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/cli/commands.md
+# That is also why `permissions:` has no `id-token: write`: no OIDC token is minted.
+#
+# ── What ops must provision (one time) ───────────────────────────────────────
+# 1. An Ed25519 keypair (OpenSSL 3+; macOS LibreSSL cannot do Ed25519 genpkey):
+#      openssl genpkey -algorithm Ed25519 -out key.pem
+# 2. A DNS TXT record on the APEX of coralswarm.com — NOT under a selector like
+#    `_mcp-auth.coralswarm.com`; MCP DNS auth is SPF-style (apex), not DKIM-style,
+#    and a selector record is simply never read (it fails as a signature error).
+#    Value, with the 32-byte raw public key base64'd:
+#      coralswarm.com. IN TXT "v=MCPv1; k=ed25519; p=<base64 public key>"
+#      PUBLIC_KEY="$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
+#    On key rotation, DELETE the old apex TXT record: a stale one is tried first
+#    and breaks verification.
+# 3. Repository secret `MCP_REGISTRY_DNS_PRIVATE_KEY` = the 64-char HEX seed
+#    (not the PEM):
+#      openssl pkey -in key.pem -noout -text | grep -A3 "priv:" | tail -n +2 | tr -d ' :\n'
+#
+# ── Hardening (recommended, see the registry's CI guidance) ──────────────────
+# This job declares `environment: mcp-registry-publish`. That key alone protects
+# nothing — GitHub auto-creates the environment unprotected on first run, and the
+# job still receives ordinary repository secrets. The protection comes from
+# configuring that environment: restrict it to release tags with a deployment
+# branch/tag rule, and/or add a required reviewer, then move
+# MCP_REGISTRY_DNS_PRIVATE_KEY from a repository secret to an ENVIRONMENT secret
+# on it. Without that, any account with write access can reach the key by pushing
+# a tag. The key can publish/overwrite anything under `com.coralswarm/*`.
+
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish to MCP Registry
+    # Forks that push a tag have no key; don't fail noisily on their behalf.
+    if: github.repository == 'CoralSwarm/coralswarm-connect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mcp-registry-publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      # The tag IS the release version. Refuse to publish a tag that disagrees
+      # with the manifests, which would put a version in the registry that no
+      # installed plugin reports.
+      - name: tag matches every manifest
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bash scripts/check-version.sh --expect "${TAG#v}"
+
+      - name: tests
+        run: node tests/run.mjs
+
+      - name: install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      # Fail on a bad server.json BEFORE the signing key is ever in the env.
+      - name: validate server.json
+        run: ./mcp-publisher validate server.json
+
+      - name: authenticate to the MCP Registry (DNS proof for com.coralswarm/*)
+        env:
+          MCP_REGISTRY_DNS_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_DNS_PRIVATE_KEY }}
+        run: |
+          if [ -z "${MCP_REGISTRY_DNS_PRIVATE_KEY}" ]; then
+            echo "::error::MCP_REGISTRY_DNS_PRIVATE_KEY is not set. It must hold the 64-char hex Ed25519 seed whose public key is published as the apex TXT record on coralswarm.com." >&2
+            exit 1
+          fi
+          ./mcp-publisher login dns \
+            --domain coralswarm.com \
+            --private-key "${MCP_REGISTRY_DNS_PRIVATE_KEY}"
+
+      - name: publish
+        run: ./mcp-publisher publish server.json

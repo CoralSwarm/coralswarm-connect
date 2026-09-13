@@ -1414,10 +1414,16 @@ function runDispatcher(home, payload, cwd) {
 
 // (n4) manifests exist, use the production name, and point at the same files.
 {
+  // The release version is ONE string across every manifest (scripts/check-version.sh
+  // is the gate). Assert agreement with the canonical manifest rather than a literal
+  // that has to be hand-edited on every bump — a literal goes stale silently.
+  const CANON = JSON.parse(readFileSync(join(SKILL_DIR, ".claude-plugin", "plugin.json"), "utf8")).version;
+  ok(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(CANON ?? ""),
+     `plugin version is semver (got ${JSON.stringify(CANON)})`);
   for (const rel of [".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", ".codex-plugin/plugin.json"]) {
     const p = JSON.parse(readFileSync(join(SKILL_DIR, rel), "utf8"));
     eq(p.name, "coralswarm-connect", `${rel} name is coralswarm-connect`);
-    eq(p.version, "1.1.0", `${rel} version is 1.1.0`);
+    eq(p.version, CANON, `${rel} version agrees with .claude-plugin (${CANON})`);
     eq(p.skills, "./skills/", `${rel} skills points at ./skills/`);
     eq(p.logo, "assets/logo.svg", `${rel} logo is assets/logo.svg`);
   }
@@ -1466,6 +1472,69 @@ function runDispatcher(home, payload, cwd) {
   ok(!/(?:^|\n)\s*pull_request_target\s*:/.test(wf), "CI must not use pull_request_target");
   ok(/persist-credentials:\s*false/.test(wf), "CI checkout must not persist credentials");
   ok(/permissions:\s*\n\s*contents:\s*read/.test(wf), "CI token is contents:read");
+  ok(/scripts\/check-version\.sh/.test(wf), "PR CI runs scripts/check-version.sh");
+
+  // Support/contact metadata: users reach us at these, so a silent revert matters.
+  for (const rel of [".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", ".codex-plugin/plugin.json"]) {
+    const p = JSON.parse(readFileSync(join(SKILL_DIR, rel), "utf8"));
+    eq(p.homepage, "https://coralswarm.com", `${rel} homepage is the product site`);
+    eq(p.author?.email, "support@coralswarm.com", `${rel} author email is support@coralswarm.com`);
+    eq(p.repository, "https://github.com/CoralSwarm/coralswarm-connect", `${rel} repository is this repo`);
+    eq(p.metadata?.support, "https://github.com/CoralSwarm/coralswarm-connect/issues",
+       `${rel} support points at this repo's issues`);
+  }
+  for (const rel of [".claude-plugin/marketplace.json", ".cursor-plugin/marketplace.json"]) {
+    const m = JSON.parse(readFileSync(join(SKILL_DIR, rel), "utf8"));
+    eq(m.owner?.email, "support@coralswarm.com", `${rel} owner email is support@coralswarm.com`);
+    eq(m.owner?.url, "https://coralswarm.com", `${rel} owner url is the product site`);
+  }
+}
+
+// (n5) server.json is publishable to the official MCP Registry, and the release
+// workflow that publishes it cannot be reached by untrusted code.
+{
+  const CANON = JSON.parse(readFileSync(join(SKILL_DIR, ".claude-plugin", "plugin.json"), "utf8")).version;
+  const srv = JSON.parse(readFileSync(join(SKILL_DIR, "server.json"), "utf8"));
+
+  eq(srv.$schema, "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+     "server.json pins a versioned MCP Registry schema");
+  eq(srv.name, "com.coralswarm/coralswarm", "server.json publishes under the com.coralswarm namespace");
+  eq(srv.title, "CoralSwarm Connect", "server.json title is the frozen display name");
+  eq(srv.version, CANON, `server.json version agrees with the plugin (${CANON})`);
+  eq(srv.websiteUrl, "https://coralswarm.com", "server.json websiteUrl is the product site");
+  eq(srv.repository?.source, "github", "server.json repository source is github");
+  eq(srv.repository?.url, "https://github.com/CoralSwarm/coralswarm-connect", "server.json repository url is this repo");
+  // The schema caps description at 100 chars; publishing rejects a longer one.
+  ok(typeof srv.description === "string" && srv.description.length >= 1 && srv.description.length <= 100,
+     `server.json description is 1..100 chars (got ${srv.description?.length})`);
+  eq(srv.packages, undefined, "server.json declares no packages (there is no npm/pypi artifact)");
+  eq(srv.remotes?.length, 1, "server.json declares exactly one remote");
+  eq(srv.remotes?.[0]?.type, "streamable-http", "the remote is streamable-http");
+  // The registry must never advertise an endpoint the shipped plugin does not use.
+  const mcpUrl = JSON.parse(readFileSync(join(SKILL_DIR, ".mcp.json"), "utf8")).mcpServers?.coralswarm?.url;
+  eq(srv.remotes?.[0]?.url, "https://api.coralswarm.com/mcp", "the remote is the production MCP endpoint");
+  eq(srv.remotes?.[0]?.url, mcpUrl, "server.json remote URL matches the URL the plugin ships in .mcp.json");
+
+  ok(existsSync(join(SKILL_DIR, "scripts", "check-version.sh")), "scripts/check-version.sh is committed");
+
+  const relPath = join(SKILL_DIR, ".github", "workflows", "release.yml");
+  ok(existsSync(relPath), ".github/workflows/release.yml is committed");
+  const relRaw = readFileSync(relPath, "utf8");
+  // Strip full-line comments: the header DOCUMENTS the triggers and auth modes it
+  // rejects, so a naive grep over the raw file would match its own explanation.
+  const rel = relRaw.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
+  ok(!/(?:^|\n)\s*pull_request_target\s*:/.test(rel), "release must not use pull_request_target");
+  ok(!/(?:^|\n)\s*pull_request\s*:/.test(rel), "release must not run on pull_request (it holds a signing key)");
+  ok(/(?:^|\n)\s*tags:\s*\[["']v\*\.\*\.\*["']\]/.test(rel), "release triggers on v*.*.* tags");
+  ok(/permissions:\s*\n\s*contents:\s*read/.test(rel), "release token is contents:read");
+  // DNS domain proof mints no OIDC token, so id-token must stay off.
+  ok(!/id-token:\s*write/.test(rel), "release must not request id-token: write (it uses DNS auth, not OIDC)");
+  ok(!/login\s+github-oidc/.test(rel), "OIDC cannot authorize com.coralswarm/*; release must not try it");
+  ok(/login dns/.test(rel) && /--domain coralswarm\.com/.test(rel), "release authenticates by DNS proof on coralswarm.com");
+  ok(/persist-credentials:\s*false/.test(rel), "release checkout must not persist credentials");
+  ok(/secrets\.MCP_REGISTRY_DNS_PRIVATE_KEY/.test(rel), "release reads the MCP_REGISTRY_DNS_PRIVATE_KEY secret");
+  ok(/check-version\.sh --expect/.test(rel), "release refuses a tag that disagrees with the manifests");
 }
 
 // ── summary ────────────────────────────────────────────────────────────────

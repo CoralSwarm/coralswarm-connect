@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+      # Claude Code, Cursor, Codex and the MCP Registry each carry their own
+      # copy of the release version; a tag can only mean one of them.
+      - name: version consistency
+        run: bash scripts/check-version.sh
       - name: tests
         run: node tests/run.mjs
       - name: no secrets in tree
