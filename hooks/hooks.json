@@ -1,0 +1,56 @@
+{
+  "description": "CoralSwarm auto-capture hooks — one dispatcher (run.mjs) for every host. SessionStart primes provenance + crash reconciliation and a hybrid capture inventory; UserPromptSubmit nudges mid-session saves; PreCompact/Stop flush unsaved work; PostToolUse stamps the ledger on add_context. ${CLAUDE_PLUGIN_ROOT} is the plugin install dir (Claude Code, Cursor, and Codex all set it).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "add_context",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

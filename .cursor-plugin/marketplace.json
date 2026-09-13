@@ -1,0 +1,14 @@
+{
+  "name": "coralswarm",
+  "owner": {
+    "name": "CoralSwarm",
+    "url": "https://github.com/CoralSwarm"
+  },
+  "plugins": [
+    {
+      "name": "coralswarm-connect",
+      "source": "./",
+      "description": "Connect the CoralSwarm MCP and capture coding work into your ocean as you go (hooks + bundled MCP server). Works in Claude Code, Cursor, and Codex."
+    }
+  ]
+}
