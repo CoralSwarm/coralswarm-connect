@@ -130,6 +130,18 @@ token-bearing remote like `https://x:ghp_secret@github.com/a/b.git` is only ever
 emitted as `github.com/a/b`. These values are best-effort provenance; the server
 re-normalizes and re-validates everything.
 
+### Agent sessions — background runs, bots and their subagents
+
+A run with no human at the keyboard opts in with
+`CORALSWARM_SESSION_KIND=agent` (plus `CORALSWARM_AGENT_NAME`,
+`CORALSWARM_PLATFORM`, `CORALSWARM_TASK`) in the harness's environment; the
+primer stamps `session_kind=agent` and the identity fields on every save, so
+the run lands as an **agent session** rather than an anonymous coding one. A
+coordinator that spawns subagents sets `CORALSWARM_PARENT_SESSION_ID` (the
+value the primer prints for it) on each child's environment and the server
+rolls the children up under the root. Details, the platform-required rule and
+the full variable table: `skills/coralswarm-connect/SKILL.md`, *Agent sessions*.
+
 ### Deterministic reconciliation — how crashed/killed sessions get recovered
 
 The nudges above are **model-driven**: they only help if the agent acts on them.

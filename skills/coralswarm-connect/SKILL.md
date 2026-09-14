@@ -69,6 +69,50 @@ All of this is **best-effort provenance** (audit D5 rework): the model copies
 the values onto its saves, but nothing downstream depends on their
 completeness.
 
+The primer also emits `platform` — the harness it is running inside, as the
+server's canonical slug (`claude-code`, `cursor`, `codex`, …), detected from
+the harness's own environment markers (`CLAUDECODE` / `CLAUDE_CODE_VERSION`,
+`CURSOR_TRACE_ID` / `CURSOR_VERSION`, any `CODEX_*`). `CORALSWARM_PLATFORM`
+overrides the detection; any value is accepted and canonicalized server-side.
+Harmless on a coding session, required on an agent session (below).
+
+## Agent sessions (`session_kind=agent`)
+
+An interactive Claude Code / Cursor session is a **coding** session. A run with
+no human at the keyboard — a cloud worker, a bot, an orchestrator and the
+subagents it spawns — is an **agent** session: same capture path, but the
+corals land as `agent_session` and the session carries who the agent is, where
+it runs and what it is doing, so the Library's *Agent sessions* facet and the
+`list_sessions` / `search_atoms` filters can find it.
+
+Opt in from the environment before the harness starts; the primer appends the
+fields to the `[CoralSwarm capture ON]` line and the agent copies them onto
+every `add_context`:
+
+| Variable | `add_context` field | Notes |
+| --- | --- | --- |
+| `CORALSWARM_SESSION_KIND=agent` | `session_kind` | Turns the run into an agent session. |
+| `CORALSWARM_AGENT_NAME` | `agent_name` | What the agent calls itself (`grokbot`, `pr-reviewer`). |
+| `CORALSWARM_PLATFORM` | `platform` | Optional when the harness is detectable; **required** otherwise — the server rejects an agent checkpoint with no platform and an unrecognised User-Agent. |
+| `CORALSWARM_TASK` | `task` | Free text or a story id (`CS-042`). |
+| `CORALSWARM_PARENT_SESSION_ID` | `parent_session_id` | Set on a **subagent**: the spawning agent's `session_id`. Implies `session_kind=agent`. |
+
+**Subagent roll-up.** A subagent inherits its root agent's `agent_name` and
+`platform` (its own declared name is kept as `subagent_name`), and every
+filter on the root — `list_sessions agent_name=…`, `search_atoms
+root_session_id=…` — matches the whole tree. A hook cannot export a variable
+into the harness's own environment, so when the primer runs as an agent it
+adds one line naming what to set on spawned subprocesses:
+
+    [CoralSwarm agent] subprocess env: CORALSWARM_PARENT_SESSION_ID="<this session's id>"
+
+Set exactly that on every child you spawn (a `claude -p` run, a worker's
+kickoff env); the child's primer picks it up and the server links it. The
+parent must have checkpointed at least once before a child does — a
+`parent_session_id` that names no existing agent session is rejected. Custom
+bots posting over HTTP pass `session_kind`, `agent_name`, `platform`, `task`
+and `parent_session_id` explicitly on `/v1/ingest/atom`.
+
 ## Recovering crashed/killed sessions (deterministic reconcile)
 
 Because a hard-killed session (SIGKILL, closed laptop, OOM) fires **no** exit

@@ -43,6 +43,46 @@ import {
 } from "./ledger.mjs";
 import { emit, isMain, parsePayload, readStdinSync } from "./harness.mjs";
 
+// Which harness this hook is running inside, as the server's canonical
+// `platform` slug (backend `services::platform::KNOWN_PLATFORMS`). Emitted for
+// EVERY session kind: harmless on a coding session, REQUIRED on an agent
+// session (the server 422s an agent checkpoint that names no platform and
+// whose User-Agent it cannot recognise). `CORALSWARM_PLATFORM` overrides the
+// detection outright — a custom bot running under a generic runtime sets it
+// to whatever it is. Any value is accepted; the server canonicalizes it.
+export function detectHarness(env = process.env) {
+  const explicit = env.CORALSWARM_PLATFORM;
+  if (explicit && explicit.trim()) return explicit.trim();
+  if (env.CLAUDE_CODE_VERSION || env.CLAUDECODE || env.CLAUDECODE_VERSION || env.CLAUDE_CODE_ENTRYPOINT) {
+    return "claude-code";
+  }
+  if (env.CURSOR_VERSION || env.CURSOR_TRACE_ID || env.CURSOR_AGENT || env.CURSOR_SESSION_ID) return "cursor";
+  if (Object.keys(env).some((k) => k.startsWith("CODEX_"))) return "codex";
+  return undefined;
+}
+
+// Agent-session opt-in (server `SessionKind::Agent`). A background harness run
+// — a cloud worker, a bot, an orchestrator — exports these before the harness
+// starts, and the primer stamps `session_kind=agent agent_name=... task=...`
+// on every add_context so the run lands as an agent session instead of an
+// anonymous coding one. `CORALSWARM_PARENT_SESSION_ID` links a subagent to the
+// agent that spawned it: the coordinator exports ITS OWN session_id under that
+// name before spawning, the child's primer reads it here, and the server rolls
+// the child up to the root (inheriting its agent_name / platform). Absent →
+// kind stays `coding`, byte-identical to before.
+export function agentFields(env = process.env) {
+  const kind = (env.CORALSWARM_SESSION_KIND || "").trim();
+  const clean = (v) => (v && v.trim() ? v.trim() : undefined);
+  const parent = clean(env.CORALSWARM_PARENT_SESSION_ID);
+  if (kind !== "agent" && !parent) return [];
+  return [
+    ["session_kind", "agent"],
+    ["agent_name", clean(env.CORALSWARM_AGENT_NAME)],
+    ["task", clean(env.CORALSWARM_TASK)],
+    ["parent_session_id", parent],
+  ];
+}
+
 export function run(payload = {}) {
 const sessionId =
   payload.session_id != null ? String(payload.session_id) : undefined;
@@ -140,6 +180,9 @@ try {
   host = undefined;
 }
 const version = harnessVersion();
+const platform = detectHarness();
+const agent = agentFields();
+const isAgent = agent.length > 0;
 
 // --- persist the branch the primer captured, so capture-nudge can detect a
 // mid-session branch switch and note it. Keyed by session_id, alongside the
@@ -186,6 +229,8 @@ const fields = [
   ["branch", branch],
   ["hostname", host],
   ["harness_version", version],
+  ["platform", platform],
+  ...agent,
 ];
 const metaLines = fields
   .filter(([, v]) => v != null && String(v).length > 0)
@@ -215,6 +260,18 @@ const metaLines = fields
 // information, none of it on the user's screen. Keys are the literal
 // add_context parameter names so copying them across is mechanical.
 const metadataBlock = metaLines ? `[CoralSwarm capture ON] ${metaLines}` : "";
+
+// Agent runs only: the one thing the server cannot tell a coordinator is how
+// its subagents find their way back to it. A hook cannot export a variable
+// into the harness's own environment, so the primer names the variable and the
+// value; the agent sets it on every subprocess it spawns (a `claude -p` child,
+// a Cursor worker's kickoff env) and each child's primer picks it up through
+// `agentFields` above. Values only — the roll-up semantics live in
+// `add_context`'s `parent_session_id` description.
+const agentBlock =
+  isAgent && sessionId
+    ? `\n[CoralSwarm agent] subprocess env: CORALSWARM_PARENT_SESSION_ID=${JSON.stringify(stripControlChars(sessionId))}`
+    : "";
 
 // --- reconcile primer: recover crashed/killed sessions --------------------
 // On a FRESH startup only, scan the ledger for prior sessions that ended with
@@ -361,7 +418,7 @@ const reconcileBlock = buildReconcileBlock();
 // What HAS to stay here is what the server cannot know: this session's id, the
 // resolved project key and repo path, and which prior sessions crashed unsaved.
 const PRIMER =
-  [metadataBlock, reconcileBlock].filter(Boolean).join("").trim() ||
+  [metadataBlock, agentBlock, reconcileBlock].filter(Boolean).join("").trim() ||
   "[CoralSwarm capture ON]";
 
 return PRIMER;
