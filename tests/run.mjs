@@ -1601,6 +1601,85 @@ const SEMVER =
   }
 }
 
+// ── (o) session-primer agent-session opt-in + harness detection ────────────
+console.log("\n[o] session-primer agent opt-in (session_kind=agent) & platform detection");
+{
+  const { detectHarness, agentFields } = await import("../hooks/session-primer.mjs");
+
+  // detectHarness: explicit override wins, then each harness's env marker,
+  // then nothing (a custom bot under a bare runtime must declare its own).
+  eq(detectHarness({ CORALSWARM_PLATFORM: " Grok " }), "Grok", "o1: CORALSWARM_PLATFORM overrides detection (server canonicalizes)");
+  eq(detectHarness({ CLAUDECODE: "1" }), "claude-code", "o1: CLAUDECODE → claude-code");
+  eq(detectHarness({ CLAUDE_CODE_VERSION: "2.1.0" }), "claude-code", "o1: CLAUDE_CODE_VERSION → claude-code");
+  eq(detectHarness({ CURSOR_TRACE_ID: "abc" }), "cursor", "o1: CURSOR_TRACE_ID → cursor");
+  eq(detectHarness({ CODEX_SANDBOX: "1" }), "codex", "o1: CODEX_* → codex");
+  eq(detectHarness({ PATH: "/bin" }), undefined, "o1: no marker → undefined");
+
+  // agentFields: absent opt-in emits nothing (kind stays coding); the opt-in
+  // stamps kind + identity; a bare parent id implies the agent kind.
+  eq(agentFields({}).length, 0, "o2: no CORALSWARM_SESSION_KIND → no agent fields");
+  const f = Object.fromEntries(
+    agentFields({ CORALSWARM_SESSION_KIND: "agent", CORALSWARM_AGENT_NAME: "grokbot", CORALSWARM_TASK: " CS-042 " }),
+  );
+  eq(f.session_kind, "agent", "o2: session_kind=agent");
+  eq(f.agent_name, "grokbot", "o2: agent_name from env");
+  eq(f.task, "CS-042", "o2: task trimmed");
+  eq(f.parent_session_id, undefined, "o2: no parent by default");
+  const child = Object.fromEntries(agentFields({ CORALSWARM_PARENT_SESSION_ID: "root-1" }));
+  eq(child.session_kind, "agent", "o2: a parent id implies session_kind=agent");
+  eq(child.parent_session_id, "root-1", "o2: parent_session_id from env");
+
+  // End to end: the primer line carries the agent fields as literal
+  // add_context parameter names, plus the subprocess-env hint for children;
+  // a plain run carries neither.
+  const repo = mkdtempSync(join(tmpdir(), "cs-primer-agent-"));
+  gitInit(repo, "https://github.com/acme/agentic.git", "main");
+  const agentEnv = {
+    ...process.env,
+    HOME: PRIMER_HOME,
+    CORALSWARM_SESSION_KIND: "agent",
+    CORALSWARM_AGENT_NAME: "grokbot",
+    CORALSWARM_PLATFORM: "grok",
+    CORALSWARM_TASK: "CS-042",
+  };
+  const out = execFileSync("node", [PRIMER], {
+    input: JSON.stringify({ session_id: "agent-root-1", cwd: repo, hook_event_name: "SessionStart", source: "startup" }),
+    env: agentEnv,
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  const ctx = JSON.parse(out).hookSpecificOutput.additionalContext;
+  ok(ctx.includes('session_kind="agent"'), "o3: primer stamps session_kind=agent");
+  ok(ctx.includes('agent_name="grokbot"'), "o3: primer stamps agent_name");
+  ok(ctx.includes('platform="grok"'), "o3: primer stamps platform");
+  ok(ctx.includes('task="CS-042"'), "o3: primer stamps task");
+  ok(ctx.includes('CORALSWARM_PARENT_SESSION_ID="agent-root-1"'), "o3: primer names the subprocess env for subagents");
+
+  const childOut = execFileSync("node", [PRIMER], {
+    input: JSON.stringify({ session_id: "agent-child-1", cwd: repo, hook_event_name: "SessionStart", source: "startup" }),
+    env: { ...agentEnv, CORALSWARM_PARENT_SESSION_ID: "agent-root-1", CORALSWARM_AGENT_NAME: "helper-a" },
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  const childCtx = JSON.parse(childOut).hookSpecificOutput.additionalContext;
+  ok(childCtx.includes('parent_session_id="agent-root-1"'), "o3: child primer stamps parent_session_id");
+  ok(childCtx.includes('CORALSWARM_PARENT_SESSION_ID="agent-child-1"'), "o3: child names ITS OWN id for grandchildren");
+
+  const plainEnv = { ...process.env, HOME: PRIMER_HOME };
+  for (const k of ["CORALSWARM_SESSION_KIND", "CORALSWARM_AGENT_NAME", "CORALSWARM_PLATFORM", "CORALSWARM_TASK", "CORALSWARM_PARENT_SESSION_ID"]) {
+    delete plainEnv[k];
+  }
+  const plainOut = execFileSync("node", [PRIMER], {
+    input: JSON.stringify({ session_id: "plain-1", cwd: repo, hook_event_name: "SessionStart", source: "startup" }),
+    env: plainEnv,
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  const plainCtx = JSON.parse(plainOut).hookSpecificOutput.additionalContext;
+  ok(!plainCtx.includes("session_kind="), "o4: a plain session declares no kind (server default stays coding)");
+  ok(!plainCtx.includes("[CoralSwarm agent]"), "o4: a plain session gets no subprocess-env hint");
+}
+
 // ── summary ────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? "✓" : "✗"} ${pass} passed, ${fail} failed`);
 if (fail > 0) {
