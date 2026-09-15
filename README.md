@@ -121,8 +121,9 @@ once per `session_id` so a dual Claude+Cursor install does not inject twice.
 ### Session metadata & the credential-stripping guarantee (Phase 2)
 
 The `SessionStart` primer reads the hook stdin payload and collects
-**best-effort** session metadata — every field is individually optional and the
-hook never fails or blocks if git/env is missing. The git remote is run through
+**best-effort** session metadata — unavailable fields are omitted and the hook
+keeps running if git/env is missing. Saving a session checkpoint still requires a
+`session_id`; optional provenance can be omitted. The git remote is run through
 `hooks/project-key.mjs`, a byte-for-byte parity port of the backend v1
 normalizer (`backend/src/project_key.rs`), which **unconditionally strips
 embedded credentials before the value is ever injected into the prompt** — a
@@ -132,15 +133,19 @@ re-normalizes and re-validates everything.
 
 ### Agent sessions — background runs, bots and their subagents
 
-A run with no human at the keyboard opts in with
-`CORALSWARM_SESSION_KIND=agent` (plus `CORALSWARM_AGENT_NAME`,
-`CORALSWARM_PLATFORM`, `CORALSWARM_TASK`) in the harness's environment; the
-primer stamps `session_kind=agent` and the identity fields on every save, so
-the run lands as an **agent session** rather than an anonymous coding one. A
-coordinator that spawns subagents sets `CORALSWARM_PARENT_SESSION_ID` (the
-value the primer prints for it) on each child's environment and the server
-rolls the children up under the root. Details, the platform-required rule and
-the full variable table: `skills/coralswarm-connect/SKILL.md`, *Agent sessions*.
+A bot or background worker saves an **agent session** by passing both a stable
+`session_id` and `session_kind="agent"` to `add_context`, with `agent_name` and its
+actual client `platform`. Keep the same session ID across topics and use a new
+checkpoint ID for each milestone. `session_kind` alone leaves the save as a note.
+
+In a supported harness, set `CORALSWARM_SESSION_KIND=agent` (plus
+`CORALSWARM_AGENT_NAME`, `CORALSWARM_PLATFORM`, `CORALSWARM_TASK`) before startup;
+the primer emits those values alongside the harness's session ID for the agent to
+copy. Custom bots call MCP directly and keep session/checkpoint IDs in their run
+state. See the [save contract and examples](skills/coralswarm/SKILL.md#saving-work)
+for standalone notes, coding conversations, bot checkpoints, retries, and confirming
+what was saved. See [agent setup](skills/coralswarm-connect/SKILL.md#agent-sessions-session_kindagent)
+for environment variables and linking each subagent's own session to its parent.
 
 ### Deterministic reconciliation — how crashed/killed sessions get recovered
 
