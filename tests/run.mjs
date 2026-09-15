@@ -1629,6 +1629,40 @@ console.log("\n[o] session-primer agent opt-in (session_kind=agent) & platform d
   eq(child.session_kind, "agent", "o2: a parent id implies session_kind=agent");
   eq(child.parent_session_id, "root-1", "o2: parent_session_id from env");
 
+  // agentFields: NAME DISCOVERY is independent of the session_kind opt-in.
+  // The backend now infers kind from agent_name's presence, so a discoverable
+  // name with NO opt-in emits agent_name ALONE (never session_kind); the
+  // explicit opt-in above remains available for a harness the server can't
+  // otherwise identify. CORALSWARM_AGENT_NAME wins when both sources are set.
+  const nameOnly = Object.fromEntries(agentFields({ CORALSWARM_AGENT_NAME: "grokbot" }));
+  eq(nameOnly.agent_name, "grokbot", "o2b: CORALSWARM_AGENT_NAME alone emits agent_name");
+  eq(nameOnly.session_kind, undefined, "o2b: CORALSWARM_AGENT_NAME alone declares no session_kind");
+  eq(Object.keys(nameOnly).length, 1, "o2b: CORALSWARM_AGENT_NAME alone emits agent_name ONLY");
+
+  const sdkOnly = Object.fromEntries(agentFields({ CLAUDE_AGENT_SDK_CLIENT_APP: "OpenClaw/4.2.0" }));
+  eq(sdkOnly.agent_name, "OpenClaw", "o2b: CLAUDE_AGENT_SDK_CLIENT_APP alone emits a normalized agent_name (name/version -> name)");
+  eq(sdkOnly.session_kind, undefined, "o2b: CLAUDE_AGENT_SDK_CLIENT_APP alone declares no session_kind");
+
+  const bothNames = Object.fromEntries(
+    agentFields({ CORALSWARM_AGENT_NAME: "grokbot", CLAUDE_AGENT_SDK_CLIENT_APP: "OpenClaw/4.2.0" }),
+  );
+  eq(bothNames.agent_name, "grokbot", "o2b: CORALSWARM_AGENT_NAME wins over CLAUDE_AGENT_SDK_CLIENT_APP");
+
+  const optInWithSdkName = Object.fromEntries(
+    agentFields({ CORALSWARM_SESSION_KIND: "agent", CLAUDE_AGENT_SDK_CLIENT_APP: "Viktor/1.0" }),
+  );
+  eq(optInWithSdkName.session_kind, "agent", "o2b: opt-in + a discovered name still stamps session_kind=agent");
+  eq(optInWithSdkName.agent_name, "Viktor", "o2b: opt-in + a discovered name still stamps agent_name (unchanged contract)");
+
+  // Pins the founder's definition: Claude Code is a CODING harness in every
+  // mode (cli, sdk-cli/`claude -p`, sdk-ts, sdk-py) — its entrypoint value
+  // must never be read as an agent signal, opt-in or discovery.
+  eq(
+    agentFields({ CLAUDE_CODE_ENTRYPOINT: "sdk-cli" }).length,
+    0,
+    "o2b: CLAUDE_CODE_ENTRYPOINT=sdk-cli alone emits NOTHING agent-related",
+  );
+
   // End to end: the primer line carries the agent fields as literal
   // add_context parameter names, plus the subprocess-env hint for children;
   // a plain run carries neither.
@@ -1666,7 +1700,14 @@ console.log("\n[o] session-primer agent opt-in (session_kind=agent) & platform d
   ok(childCtx.includes('CORALSWARM_PARENT_SESSION_ID="agent-child-1"'), "o3: child names ITS OWN id for grandchildren");
 
   const plainEnv = { ...process.env, HOME: PRIMER_HOME };
-  for (const k of ["CORALSWARM_SESSION_KIND", "CORALSWARM_AGENT_NAME", "CORALSWARM_PLATFORM", "CORALSWARM_TASK", "CORALSWARM_PARENT_SESSION_ID"]) {
+  for (const k of [
+    "CORALSWARM_SESSION_KIND",
+    "CORALSWARM_AGENT_NAME",
+    "CORALSWARM_PLATFORM",
+    "CORALSWARM_TASK",
+    "CORALSWARM_PARENT_SESSION_ID",
+    "CLAUDE_AGENT_SDK_CLIENT_APP", // name-discovery source too; must not leak in from the ambient shell
+  ]) {
     delete plainEnv[k];
   }
   const plainOut = execFileSync("node", [PRIMER], {
@@ -1677,7 +1718,31 @@ console.log("\n[o] session-primer agent opt-in (session_kind=agent) & platform d
   });
   const plainCtx = JSON.parse(plainOut).hookSpecificOutput.additionalContext;
   ok(!plainCtx.includes("session_kind="), "o4: a plain session declares no kind (server default stays coding)");
+  ok(!plainCtx.includes("agent_name="), "o4: a plain session has no discoverable name, so no agent_name either");
   ok(!plainCtx.includes("[CoralSwarm agent]"), "o4: a plain session gets no subprocess-env hint");
+
+  // Name discovery end to end, with NO session_kind opt-in: agent_name alone
+  // reaches the primer line, and the metadata block's control-char stripping
+  // (shared with every other interpolated field) still applies to it.
+  const discoveredOut = execFileSync("node", [PRIMER], {
+    input: JSON.stringify({ session_id: "discovered-1", cwd: repo, hook_event_name: "SessionStart", source: "startup" }),
+    env: { ...plainEnv, CORALSWARM_AGENT_NAME: "grokbot" },
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  const discoveredCtx = JSON.parse(discoveredOut).hookSpecificOutput.additionalContext;
+  ok(discoveredCtx.includes('agent_name="grokbot"'), "o5: a discovered name alone stamps agent_name, control chars stripped");
+  ok(!discoveredCtx.includes("session_kind="), "o5: a discovered name alone declares no session_kind");
+
+  const sdkDiscoveredOut = execFileSync("node", [PRIMER], {
+    input: JSON.stringify({ session_id: "discovered-2", cwd: repo, hook_event_name: "SessionStart", source: "startup" }),
+    env: { ...plainEnv, CLAUDE_AGENT_SDK_CLIENT_APP: "OpenClaw/4.2.0" },
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  const sdkDiscoveredCtx = JSON.parse(sdkDiscoveredOut).hookSpecificOutput.additionalContext;
+  ok(sdkDiscoveredCtx.includes('agent_name="OpenClaw"'), "o5: CLAUDE_AGENT_SDK_CLIENT_APP alone stamps a normalized agent_name");
+  ok(!sdkDiscoveredCtx.includes("session_kind="), "o5: CLAUDE_AGENT_SDK_CLIENT_APP alone declares no session_kind");
 }
 
 // ── summary ────────────────────────────────────────────────────────────────
