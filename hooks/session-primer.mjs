@@ -61,23 +61,74 @@ export function detectHarness(env = process.env) {
   return undefined;
 }
 
-// Agent-session opt-in (server `SessionKind::Agent`). A background harness run
-// — a cloud worker, a bot, an orchestrator — exports these before the harness
-// starts, and the primer stamps `session_kind=agent agent_name=... task=...`
-// on every add_context so the run lands as an agent session instead of an
-// anonymous coding one. `CORALSWARM_PARENT_SESSION_ID` links a subagent to the
-// agent that spawned it: the coordinator exports ITS OWN session_id under that
-// name before spawning, the child's primer reads it here, and the server rolls
-// the child up to the root (inheriting its agent_name / platform). Absent →
-// kind stays `coding`, byte-identical to before.
+// The Claude Agent SDK's own env var naming the embedding application --
+// "who the bot is" from the SDK's point of view. VERIFIED against the actual
+// consumer: `strings` on the Claude Code 2.1.272 binary shows it building a
+// User-Agent comment as `` client-app/${env.CLAUDE_AGENT_SDK_CLIENT_APP} `` and
+// forwarding the SAME raw value verbatim as the `x-client-app` HTTP header --
+// Claude Code itself never splits or parses it, and treats
+// `CLAUDE_AGENT_SDK_VERSION` as a wholly separate env var for the SDK's own
+// version. So in Claude Code's own usage this is a bare app name, not a
+// "name/version" pair. We normalize defensively anyway, since a THIRD-PARTY
+// embedding app (not Claude Code) is free to put anything in it: take the
+// substring before the first "/" or whitespace, trim, and cap at 256 chars.
+function normalizeClientApp(raw) {
+  const v = raw != null ? String(raw).trim() : "";
+  if (!v) return undefined;
+  const head = v.split(/[/\s]/, 1)[0].slice(0, 256);
+  return head.length ? head : undefined;
+}
+
+// Best-effort agent-NAME discovery, independent of the `session_kind` opt-in
+// below. `CORALSWARM_AGENT_NAME` is an operator naming their own bot;
+// `CLAUDE_AGENT_SDK_CLIENT_APP` is the Claude Agent SDK's embedding
+// application naming itself (see normalizeClientApp above). The former wins
+// when both are set, since it is the more specific, deliberately-chosen name.
+function discoverAgentName(env) {
+  const clean = (v) => (v && v.trim() ? v.trim() : undefined);
+  return clean(env.CORALSWARM_AGENT_NAME) || normalizeClientApp(env.CLAUDE_AGENT_SDK_CLIENT_APP);
+}
+
+// Agent identity, in two independent layers:
+//
+//  - NAME DISCOVERY (no opt-in required): whenever discoverAgentName() finds a
+//    name, the primer stamps `agent_name` alone. It deliberately does NOT
+//    also declare `session_kind=agent` here -- the backend is gaining
+//    server-side kind inference (agent_name present => agent session), so
+//    the plugin's job is naming, not classifying. Declaring `agent` from
+//    here would make the server's "agent needs a platform" 422 fire on
+//    harnesses this hook cannot identify -- and per the founder's definition
+//    an agent session is a NAMED AUTONOMOUS AGENT PRODUCT (grokbot, OpenClaw,
+//    Viktor); Claude Code is a CODING harness in every mode (`cli`,
+//    `sdk-cli`/`claude -p`, `sdk-ts`, `sdk-py`), so `CLAUDE_CODE_ENTRYPOINT`
+//    must never be read as a kind signal. A name alone lets the server infer
+//    agent when it can and degrade to coding when it can't -- nothing that
+//    saves today may stop saving.
+//  - EXPLICIT OPT-IN (server `SessionKind::Agent`, unchanged): a background
+//    harness run -- a cloud worker, a bot, an orchestrator -- exports
+//    `CORALSWARM_SESSION_KIND=agent` before the harness starts, and the
+//    primer stamps `session_kind=agent agent_name=... task=...` on every
+//    add_context so the run lands as an agent session instead of an
+//    anonymous coding one. This stays the escape hatch for a harness the
+//    server cannot identify by itself. `CORALSWARM_PARENT_SESSION_ID` links a
+//    subagent to the agent that spawned it: the coordinator exports ITS OWN
+//    session_id under that name before spawning, the child's primer reads it
+//    here, and the server rolls the child up to the root (inheriting its
+//    agent_name / platform).
+//
+// Absent both discovery and opt-in → no agent fields at all, byte-identical
+// to before.
 export function agentFields(env = process.env) {
   const kind = (env.CORALSWARM_SESSION_KIND || "").trim();
   const clean = (v) => (v && v.trim() ? v.trim() : undefined);
   const parent = clean(env.CORALSWARM_PARENT_SESSION_ID);
-  if (kind !== "agent" && !parent) return [];
+  const name = discoverAgentName(env);
+  if (kind !== "agent" && !parent) {
+    return name ? [["agent_name", name]] : [];
+  }
   return [
     ["session_kind", "agent"],
-    ["agent_name", clean(env.CORALSWARM_AGENT_NAME)],
+    ["agent_name", name],
     ["task", clean(env.CORALSWARM_TASK)],
     ["parent_session_id", parent],
   ];

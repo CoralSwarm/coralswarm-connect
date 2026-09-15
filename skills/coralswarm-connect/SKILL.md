@@ -99,17 +99,26 @@ corals land as `agent_session` and the session carries who the agent is, where
 it runs and what it is doing, so the Library's *Agent sessions* facet and the
 `list_sessions` / `search_atoms` filters can find it.
 
-For a supported harness, opt in from the environment before it starts. The primer
-emits these fields with the harness-supplied **`session_id`**; copy them onto every
+For a supported harness, **naming the agent is enough** — the server infers
+`session_kind=agent` from `agent_name`'s presence, so no explicit opt-in is
+required. `CORALSWARM_SESSION_KIND=agent` remains available as an explicit
+opt-in for a harness the server can't otherwise identify (it stamps
+`session_kind` itself instead of relying on inference). The primer emits these
+fields with the harness-supplied **`session_id`**; copy them onto every
 checkpoint. The ID keeps the run together, and the kind labels that session.
+
+Claude Code is a **coding** harness in every mode it can run in — interactive
+`cli`, `sdk-cli` (`claude -p`), `sdk-ts`, `sdk-py` — never an agent; its
+`CLAUDE_CODE_ENTRYPOINT` value is never read as a kind or name signal.
 
 | Source | `add_context` field | Notes |
 | --- | --- | --- |
 | Harness hook payload | `session_id` | Required for a session; reuse across the run's topics and checkpoints. |
-| `CORALSWARM_SESSION_KIND=agent` | `session_kind` | Labels the session as `agent` when `session_id` is supplied. |
-| `CORALSWARM_AGENT_NAME` | `agent_name` | What the agent calls itself (`grokbot`, `pr-reviewer`). |
+| `CORALSWARM_AGENT_NAME` | `agent_name` | What the agent calls itself (`grokbot`, `pr-reviewer`). Naming it is sufficient for the server to infer `session_kind=agent` — no opt-in needed. |
+| `CLAUDE_AGENT_SDK_CLIENT_APP` | `agent_name` | Set automatically by the Claude Agent SDK to identify the embedding application; used as a fallback name when `CORALSWARM_AGENT_NAME` isn't set. |
+| `CORALSWARM_SESSION_KIND=agent` | `session_kind` | Explicit opt-in for a harness the server can't identify by itself. Optional when a name is discoverable (above). |
 | `CORALSWARM_PLATFORM` | `platform` | Optional when the harness is detectable; **required** otherwise — the server rejects an agent checkpoint with no platform and an unrecognised User-Agent. |
-| `CORALSWARM_TASK` | `task` | Free text or a story id (`CS-042`). |
+| `CORALSWARM_TASK` | `task` | Free text or a story id (`CS-042`). Only emitted alongside the explicit `CORALSWARM_SESSION_KIND=agent` opt-in. |
 | `CORALSWARM_PARENT_SESSION_ID` | `parent_session_id` | Set on a **subagent**: the spawning agent's `session_id`. Implies `session_kind=agent`. |
 
 **Subagent roll-up.** A subagent inherits its root agent's `agent_name` and

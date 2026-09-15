@@ -138,11 +138,14 @@ A bot or background worker saves an **agent session** by passing both a stable
 actual client `platform`. Keep the same session ID across topics and use a new
 checkpoint ID for each milestone. `session_kind` alone leaves the save as a note.
 
-In a supported harness, set `CORALSWARM_SESSION_KIND=agent` (plus
-`CORALSWARM_AGENT_NAME`, `CORALSWARM_PLATFORM`, `CORALSWARM_TASK`) before startup;
-the primer emits those values alongside the harness's session ID for the agent to
-copy. Custom bots call MCP directly and keep session/checkpoint IDs in their run
-state. See the [save contract and examples](skills/coralswarm/SKILL.md#saving-work)
+In a supported harness, naming the agent is enough: set `CORALSWARM_AGENT_NAME`
+(or run under the Claude Agent SDK, which names itself via
+`CLAUDE_AGENT_SDK_CLIENT_APP`) before startup, and the primer emits `agent_name`
+alongside the harness's session ID — the server infers `session_kind=agent` from
+that name's presence. Set `CORALSWARM_SESSION_KIND=agent` explicitly (plus
+`CORALSWARM_PLATFORM`, `CORALSWARM_TASK`) only for a harness the server can't
+otherwise identify. Custom bots call MCP directly and keep session/checkpoint IDs
+in their run state. See the [save contract and examples](skills/coralswarm/SKILL.md#saving-work)
 for standalone notes, coding conversations, bot checkpoints, retries, and confirming
 what was saved. See [agent setup](skills/coralswarm-connect/SKILL.md#agent-sessions-session_kindagent)
 for environment variables and linking each subagent's own session to its parent.
