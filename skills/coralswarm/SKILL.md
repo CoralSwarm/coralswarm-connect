@@ -1,6 +1,6 @@
 ---
 name: coralswarm
-description: Use the CoralSwarm ocean — search what it already knows before starting work, and save what you learn as you go. Covers which read tool to reach for (ask_ocean vs search_atoms vs recent_activity vs get_reef), how to scope a query to a project or a past session, how to judge whether a citation is stale, and what makes a saved coral worth retrieving later. Use whenever CoralSwarm, an ocean, a reef or a coral comes up; when asked what is already known about a repo, decision or person; when resuming prior work; or when a milestone is worth persisting.
+description: Search CoralSwarm knowledge, resume prior work, and save notes or conversation checkpoints. Use when asked what an ocean knows, to save context to CoralSwarm, or to capture a coding session or bot run. Covers session identity, retries, provenance, and confirming the save.
 ---
 
 # Using CoralSwarm
@@ -67,8 +67,8 @@ returns confident noise.
 | Filter | Effect |
 |---|---|
 | `project` | Exact match on the project label, e.g. `"coralswarm"` |
-| `session_id` | One coding-agent session. Prefix-matched against `cc:{session_id}:` |
-| `source_type` | `coding_session`, `note`, `meeting`, `slack`, `email`, `document`, … |
+| `session_id` | One captured coding or agent session. Prefix-matched against `cc:{session_id}:` |
+| `source_type` | `coding_session`, `agent_session`, `note`, `meeting`, `slack`, `email`, `document`, … |
 | `since` / `until` | RFC 3339 bounds on the coral's own timestamp |
 | `scope` | Usually `private` or `account` |
 
@@ -98,7 +98,98 @@ Three habits that follow from this:
 
 ## Saving work
 
-Call `add_context`. Only `content` is required — every other field is optional.
+Call `add_context`. Choose what the user wants to preserve **before the first save**:
+
+| Save | Fields |
+|---|---|
+| A standalone note, independent of a conversation timeline | `content`; omit session fields (`source_type` defaults to `note`) |
+| The current interactive coding conversation | `content`, `session_id`, `checkpoint_id`; `session_kind` defaults to `coding` |
+| A bot, autonomous worker, orchestrator, or subagent run | `content`, `session_id`, `checkpoint_id`, `session_kind="agent"`, `agent_name`, `platform`; add `task` when known |
+
+“Save your context” from a running bot means a checkpoint of that run. A request for
+a standalone note can still produce a note. **`session_id` creates the session;
+`session_kind="agent"` alone leaves the save as a note.** Session `source_type` is
+derived by the server, so omit `source_type` and `source_id` on session saves.
+
+### Keep one conversation together
+
+- Use the `session_id` supplied by the harness primer or the bot's conversation/run
+  metadata. Reuse it across topics, milestones, and continuation of that conversation.
+  A changed topic belongs in the checkpoint content; it does not need another session.
+- If a custom bot has no supplied ID, generate one UUID **once**, store it in that
+  conversation/run's durable state, and reuse it after retries or restarts. This is a
+  bot-managed ID, not a claimed harness ID. If you cannot recover or persist the ID,
+  report that session continuity is unresolved before claiming a grouped save.
+- A new conversation/run, an explicitly requested separate session, or a subagent
+  gets its own ID. A subagent also carries its parent's ID; see
+  [subagent setup](../coralswarm-connect/SKILL.md#agent-sessions-session_kindagent).
+- Keep `session_kind` stable: the server fixes it at the first checkpoint.
+
+Choose a new `checkpoint_id` for each new milestone. Keep the same ocean, session
+fields, checkpoint ID, and content when retrying that save. Persist pending bot saves
+with those values until the outcome is known. Omitting `checkpoint_id` generates a
+fresh ID on every call; supplying `source_id` cannot make a session retry idempotent
+because the server ignores it. Reusing a checkpoint ID skips existing chunks rather
+than editing them; a correction is a new checkpoint explaining what changed. Save
+only progress not already captured.
+
+### Minimal MCP calls
+
+These are `add_context` argument objects. Substitute actual session/agent metadata;
+the sample IDs illustrate reuse.
+
+Standalone note:
+
+```json
+{"content":"The support rota changes every Monday."}
+```
+
+Interactive coding conversation, using the ID supplied by the harness:
+
+```json
+{
+  "content": "Chose cursor pagination because records can arrive during a scan.",
+  "session_id": "harness-session-123",
+  "checkpoint_id": "pagination-decision-1"
+}
+```
+
+Bot run whose MCP client is Cursor:
+
+```json
+{
+  "content": "Release checks passed. The documentation update remains open.",
+  "session_id": "bot-conversation-456",
+  "checkpoint_id": "release-checks-1",
+  "session_kind": "agent",
+  "agent_name": "release-helper",
+  "platform": "cursor",
+  "task": "Prepare the release"
+}
+```
+
+A later documentation checkpoint from that same bot conversation keeps
+`session_id="bot-conversation-456"` and uses a new `checkpoint_id`, such as
+`"documentation-1"`. A retry of the release checkpoint repeats its original arguments.
+
+### Confirm the result
+
+Before reporting a session save, check for a successful tool result with the expected
+`ocean_id` and `source_id="cc:{session_id}:{checkpoint_id}"`. Inspect `atom_ids` and
+`skipped_duplicate_chunks`: their combined count should equal the positive
+`chunks_created` count; a gap means the save is incomplete. A duplicate retry is
+not new content. A standalone note normally returns `source_id="mcp:…"`; retain
+that ID for any identical note retry.
+
+For the first checkpoint of a session, or when diagnosing grouping, call
+`list_sessions` with the returned `ocean_id` and intended `session_kind`. Match the
+exact `session_id` in `sessions` and confirm its kind and agent name. Use
+`roots_only=false` for a subagent. Reuse this confirmation for later checkpoints;
+another test write is unnecessary. If a bounded result omits the session, grouping
+is unconfirmed; absence alone does not establish failure or justify another write.
+If a result disagrees, report what was actually saved and inspect it before retrying.
+Correctly saving a later checkpoint does not
+convert or remove earlier notes or merge existing sessions.
 
 ### What is worth a coral
 
@@ -133,10 +224,21 @@ unexpectedly loses everything not yet written.
 
 ### Provenance
 
-If your harness supplies session metadata — a session id, project label, repo path,
-branch, hostname, harness version, model — pass it through on every `add_context` call.
-It is what makes `list_sessions`, project scoping and resume work at all. Pass only
-values you were actually given; never invent one.
+Pass through supplied project, repo, branch, hostname, harness version, and model
+metadata on session saves; omit unknown values. Use the ID rules above for session
+identity.
+
+`agent_name` names the bot. `platform` identifies the client/harness making the call;
+`model` identifies the model when known. For example, a Grok model using Cursor's
+MCP connection has `platform="cursor"`, with its supplied model ID in `model`. A
+custom runtime may declare its own platform slug. Agent sessions need a declared
+platform unless the server recognizes one from the request's `User-Agent` header.
+
+Platform declarations and `User-Agent` are self-reported metadata. The server's
+`platform_detected` comes from that header; `platform_verified=false` means it
+disagrees with the declaration. Describe this as a declared/client-header mismatch.
+Matching values, or no detected value, can produce `platform_verified=true`; this
+is not authenticated proof of the client or model's identity.
 
 ## Writing to an org ocean
 

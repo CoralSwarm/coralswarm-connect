@@ -1,19 +1,32 @@
 ---
 name: coralswarm-connect
-description: Onboard the CoralSwarm MCP into a coding harness (Claude Code, Cursor, or Codex) so your work is captured into your CoralSwarm ocean automatically AS YOU GO — at natural in-session checkpoints, not only at session end. Use when the user wants to connect/onboard CoralSwarm, set up automatic context capture, make sessions "join my ocean", or asks to install the CoralSwarm hooks. Fire on "onboard coralswarm", "connect coralswarm", "set up coralswarm capture", "capture my sessions into coralswarm".
+description: Connect CoralSwarm MCP and configure ongoing session capture in Claude Code, Cursor, Codex, or a custom bot. Use when onboarding CoralSwarm, installing capture hooks, or wiring a bot's conversation/run checkpoints into an ocean.
 ---
 
-# CoralSwarm Connect — onboard the MCP into a coding harness
+# CoralSwarm Connect — set up session capture
 
-Goal: after running this skill, the user's coding sessions are wired to their
-CoralSwarm ocean so that (a) relevant ocean knowledge is loaded at the start of
+Goal: after running this skill, the user's sessions are wired to their CoralSwarm
+ocean so that (a) relevant ocean knowledge is loaded at the start of
 each session and (b) meaningful work is saved back into the ocean **throughout
 the session**, at natural checkpoints — never waiting for the session to end.
 
 This runs entirely on the CoralSwarm MCP's existing OAuth connection. It
 installs no credentials and needs no backend changes — the capture is performed
-by the connected agent calling the `add_context` write tool, driven by
-`hooks/run.mjs`. Enable the plugin in **one** manager only.
+by the connected agent calling the `add_context` write tool. Supported harnesses
+receive reminders from `hooks/run.mjs`. Enable the plugin in **one** manager only.
+
+## Choose the setup path
+
+- **Claude Code, Cursor, or Codex:** follow the setup steps below. Before the first
+  save, read [Saving work](../coralswarm/SKILL.md#saving-work) for the note/session
+  decision, stable IDs, call examples, retries, and confirmation criteria.
+- **Custom bot with an MCP connection:** read that same save contract and the
+  [Agent sessions](#agent-sessions-session_kindagent) section below. Keep IDs in the
+  bot's conversation/run state and invoke `add_context` at milestones. Verify the
+  first real checkpoint using the contract's confirmation steps. Hooks are useful
+  only if the bot runs in a supported harness that fires them.
+- **Tools already connected and asked only to save context:** use
+  [Saving work](../coralswarm/SKILL.md#saving-work) directly; setup is already complete.
 
 ## What "automatic, not at session end" means here
 
@@ -33,9 +46,8 @@ this session, and the hook never blocks a turn.
   It also emits a **one-line branch-switch notice** when the git branch changes
   mid-session (fires once per switch, not per prompt).
 - **`PreCompact`** — runs right before the conversation is compacted (the
-  natural moment where context would otherwise be summarized away). The
-  guarantee: it flushes any unsaved decisions/progress into the ocean before
-  that context is lost.
+  natural moment where context would otherwise be summarized away). It reminds
+  the agent to save unsaved decisions/progress before that context is lost.
 
 A `Stop` hook is added only as a final backstop (omit with `--no-stop`); the
 whole point is that capture already happened before you got there. All four
@@ -47,12 +59,12 @@ contract, and the agent performs the actual save with the authenticated
 
 At `SessionStart`, the primer reads the hook payload on stdin and gathers
 **best-effort** metadata about the coding session, then injects a compact block
-telling the agent to stamp every `add_context` call with those exact values:
+telling the agent to stamp every session checkpoint with those exact values:
 
 - `session_id` (from the payload), `repo_path` (cwd), git `branch`
   (`git rev-parse --abbrev-ref HEAD`), the git `remote`, a normalized `project`
   key, `hostname`, and `harness_version`.
-- Every field is **individually optional**: if git is absent, the cwd isn't a
+- The hook collects fields **individually**: if git is absent, the cwd isn't a
   repo, or a command fails, the field is silently omitted and the hook still
   succeeds. The hook never fails or blocks the session.
 
@@ -65,16 +77,18 @@ the primer text. A token-bearing remote such as
 `github.com/a/b`; the token can never enter the conversation transcript. The
 server re-normalizes everything it receives as defense in depth.
 
-All of this is **best-effort provenance** (audit D5 rework): the model copies
-the values onto its saves, but nothing downstream depends on their
-completeness.
+The optional provenance fields are best-effort. **`session_id` is needed to create
+a session checkpoint**; copy it from the primer on each save. If it is missing,
+follow the [session ID rules](../coralswarm/SKILL.md#keep-one-conversation-together)
+before claiming session capture works.
 
 The primer also emits `platform` — the harness it is running inside, as the
 server's canonical slug (`claude-code`, `cursor`, `codex`, …), detected from
 the harness's own environment markers (`CLAUDECODE` / `CLAUDE_CODE_VERSION`,
 `CURSOR_TRACE_ID` / `CURSOR_VERSION`, any `CODEX_*`). `CORALSWARM_PLATFORM`
 overrides the detection; any value is accepted and canonicalized server-side.
-Harmless on a coding session, required on an agent session (below).
+See [Provenance](../coralswarm/SKILL.md#provenance) for choosing `platform` versus
+`model` and interpreting the client-header mismatch flag.
 
 ## Agent sessions (`session_kind=agent`)
 
@@ -85,13 +99,14 @@ corals land as `agent_session` and the session carries who the agent is, where
 it runs and what it is doing, so the Library's *Agent sessions* facet and the
 `list_sessions` / `search_atoms` filters can find it.
 
-Opt in from the environment before the harness starts; the primer appends the
-fields to the `[CoralSwarm capture ON]` line and the agent copies them onto
-every `add_context`:
+For a supported harness, opt in from the environment before it starts. The primer
+emits these fields with the harness-supplied **`session_id`**; copy them onto every
+checkpoint. The ID keeps the run together, and the kind labels that session.
 
-| Variable | `add_context` field | Notes |
+| Source | `add_context` field | Notes |
 | --- | --- | --- |
-| `CORALSWARM_SESSION_KIND=agent` | `session_kind` | Turns the run into an agent session. |
+| Harness hook payload | `session_id` | Required for a session; reuse across the run's topics and checkpoints. |
+| `CORALSWARM_SESSION_KIND=agent` | `session_kind` | Labels the session as `agent` when `session_id` is supplied. |
 | `CORALSWARM_AGENT_NAME` | `agent_name` | What the agent calls itself (`grokbot`, `pr-reviewer`). |
 | `CORALSWARM_PLATFORM` | `platform` | Optional when the harness is detectable; **required** otherwise — the server rejects an agent checkpoint with no platform and an unrecognised User-Agent. |
 | `CORALSWARM_TASK` | `task` | Free text or a story id (`CS-042`). |
@@ -107,11 +122,21 @@ adds one line naming what to set on spawned subprocesses:
     [CoralSwarm agent] subprocess env: CORALSWARM_PARENT_SESSION_ID="<this session's id>"
 
 Set exactly that on every child you spawn (a `claude -p` run, a worker's
-kickoff env); the child's primer picks it up and the server links it. The
+kickoff env); each child uses its **own `session_id`**, and the server links it. The
 parent must have checkpointed at least once before a child does — a
-`parent_session_id` that names no existing agent session is rejected. Custom
-bots posting over HTTP pass `session_kind`, `agent_name`, `platform`, `task`
-and `parent_session_id` explicitly on `/v1/ingest/atom`.
+`parent_session_id` that names no existing agent session is rejected. A root bot
+omits `parent_session_id`.
+
+**Custom bots:** pass the fields directly to MCP `add_context`, including
+`session_id` and a retry-stable `checkpoint_id`, as shown in the
+[minimal calls](../coralswarm/SKILL.md#minimal-mcp-calls). Environment variables
+only affect the plugin hooks; setting them alone does not populate a bot's MCP call.
+
+An existing direct HTTP integration using `/v1/ingest/atom` must follow that
+endpoint's schema, including `graph_id`, `source_type`, `source_id`, `content`,
+`participants`, and `timestamp`. Pass `session_id` plus the agent fields there too,
+and build `source_id="cc:{session_id}:{checkpoint_id}"` in the caller. That endpoint
+has no `checkpoint_id` field or MCP defaults.
 
 ## Recovering crashed/killed sessions (deterministic reconcile)
 
@@ -287,13 +312,15 @@ skill's README to add by hand.
 
 ### 3. Confirm and explain
 
-- Show the user which scope was configured and the two/three hooks installed.
-- Do a quick live proof: call `add_context` with a one-line note like
-  "CoralSwarm capture enabled for <repo> on <date>", then `search_atoms` for it
-  to confirm the round-trip.
+- Show the user which scope was configured and which capture hooks are active.
+- Use the first real checkpoint to confirm capture, following
+  [Confirm the result](../coralswarm/SKILL.md#confirm-the-result). Include the session
+  fields and verify its session record; a successful standalone note proves only
+  note ingestion. Reuse a checkpoint already saved during setup instead of writing
+  another test coral.
 - Explain the behavior: the agent will now load recent ocean context at the
-  start of a session and save meaningful milestones as it works; the `PreCompact`
-  hook guarantees a save before context is ever compacted away.
+  start of a session and save meaningful milestones as it works; `PreCompact`
+  requests a save before compaction. Capture depends on the agent making the call.
 
 ## Notes & extension
 
