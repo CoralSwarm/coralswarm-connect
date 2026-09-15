@@ -1,7 +1,7 @@
 {
   "name": "coralswarm-connect",
   "displayName": "CoralSwarm Connect",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Connect the CoralSwarm MCP and capture coding work into your ocean as you go — session primer, mid-session save nudges, precompact flush, and crash-reconcile.",
   "author": {
     "name": "CoralSwarm",
