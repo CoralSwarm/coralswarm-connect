@@ -455,22 +455,20 @@ function buildReconcileBlock() {
 }
 const reconcileBlock = buildReconcileBlock();
 
-// The primer is now VALUES ONLY — at most three short lines, usually one.
-//
-// Every line of standing prose that used to live here (you are connected to an
-// ocean; one ask_ocean for this project, not a hunt; save as you go; resolve the
-// primary ocean; don't set source_type; keep notes self-contained; never save secrets)
-// was IDENTICAL on every session, yet was re-injected into the transcript every
-// time — costing screen space on top of context. It now ships through the MCP
-// server's `instructions` and the `add_context` / `list_sessions` tool
-// descriptions, which the model receives through the protocol and the user
-// never sees. Nothing was dropped; only the delivery channel changed.
-//
-// What HAS to stay here is what the server cannot know: this session's id, the
-// resolved project key and repo path, and which prior sessions crashed unsaved.
-const PRIMER =
+// Standing one-read / save-timing guidance stays in SessionStart
+// additionalContext. skills/coralswarm-connect/SKILL.md requires all four
+// hooks to inject it; the configured MCP server is an external HTTP
+// endpoint, so its initialize instructions do not satisfy that contract
+// here. Other identical standing prose (resolve the primary ocean, don't
+// set source_type, keep notes self-contained, never save secrets) still
+// ships through tool descriptions. Session-specific values and the
+// capture-ON fallback are unchanged.
+const STANDING_GUIDANCE =
+  "[CoralSwarm] One ask_ocean for this project — not a hunt on every turn. Save meaningful work at natural checkpoints throughout the session; do not wait for the session to end.";
+const sessionSpecific =
   [metadataBlock, agentBlock, reconcileBlock].filter(Boolean).join("").trim() ||
   "[CoralSwarm capture ON]";
+const PRIMER = [STANDING_GUIDANCE, sessionSpecific].filter(Boolean).join("\n").trim();
 
 return PRIMER;
 }
