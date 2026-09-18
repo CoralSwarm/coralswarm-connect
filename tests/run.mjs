@@ -1745,6 +1745,22 @@ console.log("\n[o] session-primer agent opt-in (session_kind=agent) & platform d
   ok(!sdkDiscoveredCtx.includes("session_kind="), "o5: CLAUDE_AGENT_SDK_CLIENT_APP alone declares no session_kind");
 }
 
+// ── (p) skill contract: no hunt-on-every-turn ──────────────────────────────
+console.log("\n[p] coralswarm skill does not tell agents to hunt the ocean on every turn");
+{
+  const skill = readFileSync(join(SKILL_DIR, "skills/coralswarm/SKILL.md"), "utf8");
+  ok(
+    !skill.includes("Reach for these before starting substantive work"),
+    "p1: skill no longer tells agents to query before every substantive turn"
+  );
+  ok(skill.includes("One content read per topic"), "p1: skill states the one-read budget");
+  ok(skill.includes("Query only this user's captured work"), "p1: skill limits queries to captured work");
+  ok(
+    skill.includes("explicitly asked to save, remember, or add it to the ocean"),
+    "p1: skill does not auto-save ordinary chat"
+  );
+}
+
 // ── summary ────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? "✓" : "✗"} ${pass} passed, ${fail} failed`);
 if (fail > 0) {

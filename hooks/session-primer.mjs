@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// CoralSwarm SessionStart hook — makes the session ocean-aware, primes
-// capture-as-you-go, AND emits real, sanitized session metadata (Phase 2) so
-// the agent can stamp every add_context call with provenance.
+// CoralSwarm SessionStart hook — stamps session metadata, primes
+// capture-as-you-go, and recovers crashed sessions. It does not tell the
+// agent to hunt the ocean on every turn.
 //
 // The hook payload arrives on stdin as JSON (session_id, cwd, transcript_path,
 // hook_event_name, source). This hook now READS it and gathers best-effort
@@ -458,8 +458,8 @@ const reconcileBlock = buildReconcileBlock();
 // The primer is now VALUES ONLY — at most three short lines, usually one.
 //
 // Every line of standing prose that used to live here (you are connected to an
-// ocean; load context before starting; save as you go; resolve the primary
-// ocean; don't set source_type; keep notes self-contained; never save secrets)
+// ocean; one ask_ocean for this project, not a hunt; save as you go; resolve the
+// primary ocean; don't set source_type; keep notes self-contained; never save secrets)
 // was IDENTICAL on every session, yet was re-injected into the transcript every
 // time — costing screen space on top of context. It now ships through the MCP
 // server's `instructions` and the `add_context` / `list_sessions` tool
