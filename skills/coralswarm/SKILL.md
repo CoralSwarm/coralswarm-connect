@@ -32,7 +32,23 @@ it refuses to guess, because listing the wrong ocean's sessions is a silent erro
 
 ## Finding what the ocean knows
 
-Reach for these before starting substantive work, not after.
+Query only this user's captured work — notes, sessions, meetings, decisions, this
+project's internals. Skip general knowledge, news, and market research. Mentioning
+the product in a public-market question does not count.
+
+One content read per topic. Prefer `ask_ocean`. Use `search_atoms`, `get_reef`,
+`recent_activity`, `list_reefs`, or `list_meetings` only when that tool is the
+surface the user asked for. Do not stack them. A `no_answer` is final — do not
+follow with `search_atoms`. Clarifications reuse context; a new captured-work
+question may take one new read.
+
+A coding session with a harness primer (session/repo/project) may do **one**
+`ask_ocean` for this project. `get_task_result`, `get_atom` (omitted bodies), and
+tenant select are plumbing and do not count. Do not call `list_oceans` before a
+read.
+
+If a CoralSwarm widget already showed the answer, reply in one or two sentences —
+do not restate it at length.
 
 | Tool | Reach for it when |
 |---|---|
@@ -219,8 +235,13 @@ Summarize instead.
 
 ### When
 
-Save **as milestones happen**, not in a batch at the end. A session that ends
-unexpectedly loses everything not yet written.
+In a **coding or agent session** with a harness `session_id`, save **as milestones
+happen**, not in a batch at the end. A session that ends unexpectedly loses
+everything not yet written.
+
+In ordinary chat (claude.ai, no harness `session_id`), save only if the user
+explicitly asked to save, remember, or add it to the ocean — not because a
+finding seemed important.
 
 ### Provenance
 
@@ -274,6 +295,8 @@ content; calling `select_tenant` with no `org_id` returns to personal.
 
 ## Common mistakes
 
+- **Hunting the ocean on every turn.** Query captured work only; one content read;
+  do not stack `ask_ocean` with `search_atoms`.
 - **Treating the first `ask_ocean` reply as the answer.** It is a `task_id`. Poll it.
 - **Passing `ocean_id` by hand** and hitting the org commons, which cannot be written.
 - **Omitting `ocean_id` on `list_sessions`**, which is the one tool that requires it.
@@ -281,4 +304,5 @@ content; calling `select_tenant` with no `org_id` returns to personal.
 - **Reading an empty result as an empty ocean.** Check the filters first, then
   `get_ocean_stats`.
 - **Trusting an old citation.** Read `age_days`.
-- **Batching saves until the end.** Save as you go.
+- **Batching saves until the end.** Save as you go in a coding session. Do not
+  auto-save ordinary chat.

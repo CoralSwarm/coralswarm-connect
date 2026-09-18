@@ -6,9 +6,10 @@ description: Connect CoralSwarm MCP and configure ongoing session capture in Cla
 # CoralSwarm Connect — set up session capture
 
 Goal: after running this skill, the user's sessions are wired to their CoralSwarm
-ocean so that (a) relevant ocean knowledge is loaded at the start of
-each session and (b) meaningful work is saved back into the ocean **throughout
-the session**, at natural checkpoints — never waiting for the session to end.
+ocean so that (a) a coding session with a harness primer may do **one** `ask_ocean`
+for this project — not a hunt on every turn — and (b) meaningful work is saved
+back into the ocean **throughout the session**, at natural checkpoints — never
+waiting for the session to end.
 
 This runs entirely on the CoralSwarm MCP's existing OAuth connection. It
 installs no credentials and needs no backend changes — the capture is performed
@@ -36,9 +37,10 @@ DURING a session, not the terminal `Stop` event. Events the host never fires
 stay dark — the primer injects a compact inventory of registered vs observed
 this session, and the hook never blocks a turn.
 
-- **`SessionStart`** — runs once when a session begins. Primes the agent to be
-  ocean-aware and to save each milestone as it happens, **and emits real,
-  sanitized session metadata** (see below).
+- **`SessionStart`** — runs once when a session begins. Emits real, sanitized
+  session metadata (see below) and primes capture-as-you-go. It does **not**
+  tell the agent to search the ocean on every prompt; one `ask_ocean` for this
+  project is enough.
 - **`UserPromptSubmit`** — the recurring, mid-session capture. Fires on every
   prompt but **debounces** to ~once every 15 min (per session), injecting a
   brief "save your recent progress" reminder so work is persisted as it
@@ -327,9 +329,10 @@ skill's README to add by hand.
   fields and verify its session record; a successful standalone note proves only
   note ingestion. Reuse a checkpoint already saved during setup instead of writing
   another test coral.
-- Explain the behavior: the agent will now load recent ocean context at the
-  start of a session and save meaningful milestones as it works; `PreCompact`
-  requests a save before compaction. Capture depends on the agent making the call.
+- Explain the behavior: a coding session may do one `ask_ocean` for this
+  project (not a hunt on every prompt) and will save meaningful milestones as
+  it works; `PreCompact` requests a save before compaction. Capture depends on
+  the agent making the call.
 
 ## Notes & extension
 
