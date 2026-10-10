@@ -10,6 +10,11 @@ kernel no-ops the duplicate).
 
 ## Install
 
+Public directory submission materials and the separate OpenAI ZIP builder are
+documented in [directory publication](docs/directory-publication.md). The OpenAI
+directory package supports requested searches and selected saves without capture
+hooks; the coding plugin below retains its existing capture behavior.
+
 There are two levels. The **plugin** gives you the MCP tools *plus* the capture
 hooks and the bundled skill; the **raw MCP URL** gives you the tools only, and
 works in any MCP client.
@@ -70,9 +75,9 @@ register the same events a second time in `settings.json`.
    `claude mcp add`), not a plugin edit.
 
    Personal vs. organization is chosen IN-BAND, not by URL: if you belong to
-   ≥1 organization, the connection starts restricted to one tool,
-   `list_tenants`. Call it, then call `select_tenant` with the org you want
-   (or leave it unselected to work in your personal ocean) — that unlocks the
+   ≥1 organization, the connection starts restricted to the workspace tools,
+   `list_tenants` and `select_tenant`. Call `list_tenants`, then `select_tenant`
+   with the org you want (or without `org_id` for your personal ocean). That unlocks the
    rest of the tools, scoped to whichever plane you picked. Calling
    `select_tenant` again, any time, switches — no new session required,
    unlike the old per-URL setup.
