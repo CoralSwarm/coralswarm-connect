@@ -1762,6 +1762,14 @@ console.log("\n[p] coralswarm skill does not tell agents to hunt the ocean on ev
 }
 
 // ── summary ────────────────────────────────────────────────────────────────
+console.log("\n[q] OpenAI directory package boundary");
+try {
+  execFileSync(process.execPath, [join(SKILL_DIR, "tests/package-openai.mjs")], { stdio: "inherit" });
+  ok(true, "q1: directory package preserves its allowlist and rejects unsupported components");
+} catch {
+  ok(false, "q1: directory package checks pass");
+}
+
 console.log(`\n${fail === 0 ? "✓" : "✗"} ${pass} passed, ${fail} failed`);
 if (fail > 0) {
   console.error("\nFailures:\n" + failures.map((f) => "  - " + f).join("\n"));

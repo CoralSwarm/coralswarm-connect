@@ -233,7 +233,8 @@ claude mcp list 2>/dev/null | grep -i coralswarm
   either fall back silently to personal or fail Cursor's resource match.
 
   If the user belongs to ≥1 organization, the connection starts restricted to
-  exactly one callable tool: `list_tenants`. Call it, present the returned
+  the two workspace tools: `list_tenants` and `select_tenant`. Call `list_tenants`
+  and present the returned
   organizations to the user **by name** (never pick or guess on their
   behalf), then call `select_tenant` with the `org_id` they choose. Only
   after that does the rest of the tool catalogue unlock, scoped to that
@@ -270,11 +271,12 @@ claude mcp list 2>/dev/null | grep -i coralswarm
 
   This ONE URL serves both the personal ocean and every organization the user
   belongs to — there is no separate org address anymore. If they belong to
-  ≥1 organization, the connection starts restricted to `list_tenants` only:
-  call it, present the organizations by name, then call `select_tenant` with
+  ≥1 organization, the connection starts restricted to the workspace tools
+  `list_tenants` and `select_tenant`: call `list_tenants`, present the
+  organizations by name, then call `select_tenant` with
   their pick to unlock the rest of the tools against that org's content (or
-  leave it on personal — nothing else to do). To work in a SECOND org (or an
-  org plus personal) at once in the same session, register this same URL
+  call `select_tenant` without `org_id` for personal access). To work in a
+  SECOND org (or an org plus personal) at once in the same session, register this same URL
   again under a different server name (e.g.
   `claude mcp add --transport http coralswarm-acme https://api.coralswarm.com/mcp`)
   and call `select_tenant` on that registration independently — each

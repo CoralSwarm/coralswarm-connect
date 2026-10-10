@@ -288,8 +288,9 @@ If the tools are not available, the MCP server is not connected.
 
 The endpoint is `https://api.coralswarm.com/mcp` for everyone — there is no
 separate org address. If you belong to ≥1 organization, the connection
-starts restricted to one tool, `list_tenants`; call it, then `select_tenant`
-with the org you want (or leave it unselected to stay on your personal
+starts restricted to the workspace tools, `list_tenants` and `select_tenant`.
+Call `list_tenants`, then `select_tenant` with the org you want (or without
+`org_id` for your personal
 ocean). Selecting an org unlocks the rest of the tools scoped to that org's
 content; calling `select_tenant` with no `org_id` returns to personal.
 
